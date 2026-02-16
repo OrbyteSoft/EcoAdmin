@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { downloadCSV } from "@/lib/csv";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -11,9 +12,11 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Pencil, Trash2, Search } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Plus, Pencil, Trash2, Search, Download, ChevronRight, FolderOpen, Folder } from "lucide-react";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 interface Category {
   id: string;
@@ -28,6 +31,49 @@ interface Category {
 
 const emptyForm = { name: "", slug: "", description: "", imageUrl: "", parentId: "", isActive: true };
 
+function CategoryTreeNode({ category, allCategories, depth = 0, onEdit, onDelete }: {
+  category: Category;
+  allCategories: Category[];
+  depth?: number;
+  onEdit: (c: Category) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(true);
+  const children = allCategories.filter(c => c.parentId === category.id);
+  const hasChildren = children.length > 0;
+
+  return (
+    <div>
+      <div
+        className={cn(
+          "flex items-center gap-2 py-2 px-3 rounded-md hover:bg-muted/50 group transition-colors",
+        )}
+        style={{ paddingLeft: `${depth * 24 + 12}px` }}
+      >
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className={cn("p-0.5 rounded transition-transform", hasChildren ? "visible" : "invisible")}
+        >
+          <ChevronRight className={cn("h-4 w-4 text-muted-foreground transition-transform", expanded && "rotate-90")} />
+        </button>
+        {hasChildren ? <FolderOpen className="h-4 w-4 text-primary" /> : <Folder className="h-4 w-4 text-muted-foreground" />}
+        <span className="font-medium flex-1">{category.name}</span>
+        <span className="text-xs text-muted-foreground">{category.slug}</span>
+        <Badge variant={category.isActive ? "default" : "outline"} className="text-xs">
+          {category.isActive ? "Active" : "Inactive"}
+        </Badge>
+        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(category)}><Pencil className="h-3 w-3" /></Button>
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onDelete(category.id)}><Trash2 className="h-3 w-3 text-destructive" /></Button>
+        </div>
+      </div>
+      {expanded && children.map(child => (
+        <CategoryTreeNode key={child.id} category={child} allCategories={allCategories} depth={depth + 1} onEdit={onEdit} onDelete={onDelete} />
+      ))}
+    </div>
+  );
+}
+
 export default function Categories() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
@@ -39,6 +85,7 @@ export default function Categories() {
   const { data, isLoading } = useQuery({ queryKey: ["categories"], queryFn: () => api<any>("/categories") });
   const categories: Category[] = Array.isArray(data) ? data : data?.data || [];
   const filtered = categories.filter(c => c.name.toLowerCase().includes(search.toLowerCase()));
+  const rootCategories = categories.filter(c => !c.parentId);
 
   const saveMutation = useMutation({
     mutationFn: (body: any) =>
@@ -67,13 +114,27 @@ export default function Categories() {
     saveMutation.mutate(body);
   };
 
+  const handleExportCSV = () => {
+    const headers = ["Name", "Slug", "Description", "Parent", "Active"];
+    const rows = categories.map(c => [
+      c.name, c.slug, c.description || "",
+      c.parentId ? categories.find(p => p.id === c.parentId)?.name || "" : "",
+      c.isActive ? "Yes" : "No",
+    ]);
+    downloadCSV("categories", headers, rows);
+    toast.success("Categories exported");
+  };
+
   if (isLoading) return <div className="space-y-4"><h1 className="text-2xl font-bold">Categories</h1>{[1,2,3].map(i=><Skeleton key={i} className="h-16"/>)}</div>;
 
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-2xl font-bold">Categories</h1>
-        <Button onClick={openCreate}><Plus className="mr-2 h-4 w-4" />Add Category</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExportCSV}><Download className="mr-2 h-4 w-4" />Export CSV</Button>
+          <Button onClick={openCreate}><Plus className="mr-2 h-4 w-4" />Add Category</Button>
+        </div>
       </div>
 
       <div className="relative max-w-sm">
@@ -81,36 +142,59 @@ export default function Categories() {
         <Input placeholder="Search categories..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Slug</TableHead>
-                <TableHead>Parent</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map(c => (
-                <TableRow key={c.id}>
-                  <TableCell className="font-medium">{c.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{c.slug}</TableCell>
-                  <TableCell>{c.parentId ? categories.find(p => p.id === c.parentId)?.name || "—" : "—"}</TableCell>
-                  <TableCell><Badge variant={c.isActive ? "default" : "outline"}>{c.isActive ? "Active" : "Inactive"}</Badge></TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => openEdit(c)}><Pencil className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" onClick={() => setDeleteId(c.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {filtered.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No categories found</TableCell></TableRow>}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="table">
+        <TabsList>
+          <TabsTrigger value="table">Table View</TabsTrigger>
+          <TabsTrigger value="tree">Tree View</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="table">
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Slug</TableHead>
+                    <TableHead>Parent</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filtered.map(c => (
+                    <TableRow key={c.id}>
+                      <TableCell className="font-medium">{c.name}</TableCell>
+                      <TableCell className="text-muted-foreground">{c.slug}</TableCell>
+                      <TableCell>{c.parentId ? categories.find(p => p.id === c.parentId)?.name || "—" : "—"}</TableCell>
+                      <TableCell><Badge variant={c.isActive ? "default" : "outline"}>{c.isActive ? "Active" : "Inactive"}</Badge></TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="icon" onClick={() => openEdit(c)}><Pencil className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => setDeleteId(c.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {filtered.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No categories found</TableCell></TableRow>}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="tree">
+          <Card>
+            <CardContent className="py-4">
+              {rootCategories.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">No categories found</p>
+              ) : (
+                rootCategories.map(c => (
+                  <CategoryTreeNode key={c.id} category={c} allCategories={categories} onEdit={openEdit} onDelete={id => setDeleteId(id)} />
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-lg">

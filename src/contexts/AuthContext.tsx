@@ -22,15 +22,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem("access_token");
-    if (token) {
-      api<User>("/auth/me")
-        .then(setUser)
-        .catch(() => clearTokens())
-        .finally(() => setIsLoading(false));
-    } else {
-      setIsLoading(false);
-    }
+    let isMounted = true;
+
+    const initializeAuth = async () => {
+      const token = localStorage.getItem("access_token");
+      if (!token) {
+        if (isMounted) setIsLoading(false);
+        return;
+      }
+      try {
+        const userData = await api<User>("/auth/me");
+        if (isMounted) setUser(userData);
+      } catch {
+        // api() already attempts token refresh on 401 before throwing
+        clearTokens();
+        if (isMounted) setUser(null);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+
+    initializeAuth();
+
+    return () => { isMounted = false; };
   }, []);
 
   const login = async (email: string, password: string) => {

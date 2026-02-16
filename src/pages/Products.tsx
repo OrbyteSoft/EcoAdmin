@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { formatNPR } from "@/lib/format";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { downloadCSV } from "@/lib/csv";
+import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Pencil, Trash2, Search } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Download, Star, Flame, Sparkles, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 
 interface Product {
@@ -28,10 +29,19 @@ interface Product {
   stock: number;
   categoryId?: string;
   isActive: boolean;
+  isFeatured: boolean;
+  isBestSeller: boolean;
+  isNewArrival: boolean;
+  isFlashDeal: boolean;
+  flashDealEnd?: string | null;
   images?: { id: string; url: string }[];
 }
 
-const emptyProduct = { name: "", slug: "", description: "", price: 0, compareAt: 0, sku: "", stock: 0, categoryId: "", isActive: true, images: [] as string[] };
+const emptyProduct = {
+  name: "", slug: "", description: "", price: 0, compareAt: 0, sku: "", stock: 0, categoryId: "",
+  isActive: true, isFeatured: false, isBestSeller: false, isNewArrival: false, isFlashDeal: false, flashDealEnd: "",
+  images: [] as string[],
+};
 
 export default function Products() {
   const qc = useQueryClient();
@@ -64,7 +74,14 @@ export default function Products() {
   const openCreate = () => { setEditing(null); setForm(emptyProduct); setDialogOpen(true); };
   const openEdit = (p: Product) => {
     setEditing(p);
-    setForm({ name: p.name, slug: p.slug, description: p.description || "", price: p.price, compareAt: p.compareAt || 0, sku: p.sku, stock: p.stock, categoryId: p.categoryId || "", isActive: p.isActive, images: [] });
+    setForm({
+      name: p.name, slug: p.slug, description: p.description || "", price: p.price, compareAt: p.compareAt || 0,
+      sku: p.sku, stock: p.stock, categoryId: p.categoryId || "", isActive: p.isActive,
+      isFeatured: p.isFeatured ?? false, isBestSeller: p.isBestSeller ?? false,
+      isNewArrival: p.isNewArrival ?? false, isFlashDeal: p.isFlashDeal ?? false,
+      flashDealEnd: p.flashDealEnd ? new Date(p.flashDealEnd).toISOString().slice(0, 16) : "",
+      images: [],
+    });
     setDialogOpen(true);
   };
 
@@ -72,8 +89,30 @@ export default function Products() {
     const body: any = { ...form, price: Number(form.price), compareAt: Number(form.compareAt), stock: Number(form.stock) };
     if (!body.categoryId) delete body.categoryId;
     if (!body.compareAt) delete body.compareAt;
+    if (!body.flashDealEnd) delete body.flashDealEnd;
+    else body.flashDealEnd = new Date(body.flashDealEnd).toISOString();
     saveMutation.mutate(body);
   };
+
+  const handleExportCSV = () => {
+    const headers = ["Name", "Slug", "SKU", "Price", "Stock", "Active", "Featured", "Best Seller", "New Arrival", "Flash Deal"];
+    const rows = products.map(p => [
+      p.name, p.slug, p.sku || "", String(p.price), String(p.stock),
+      p.isActive ? "Yes" : "No", p.isFeatured ? "Yes" : "No", p.isBestSeller ? "Yes" : "No",
+      p.isNewArrival ? "Yes" : "No", p.isFlashDeal ? "Yes" : "No",
+    ]);
+    downloadCSV("products", headers, rows);
+    toast.success("Products exported");
+  };
+
+  const sectionBadges = (p: Product) => (
+    <div className="flex gap-1 flex-wrap">
+      {p.isFeatured && <Badge variant="secondary" className="text-xs"><Star className="h-3 w-3 mr-1" />Featured</Badge>}
+      {p.isBestSeller && <Badge variant="secondary" className="text-xs"><TrendingUp className="h-3 w-3 mr-1" />Best Seller</Badge>}
+      {p.isNewArrival && <Badge variant="secondary" className="text-xs"><Sparkles className="h-3 w-3 mr-1" />New</Badge>}
+      {p.isFlashDeal && <Badge variant="destructive" className="text-xs"><Flame className="h-3 w-3 mr-1" />Flash</Badge>}
+    </div>
+  );
 
   if (isLoading) return <div className="space-y-4"><h1 className="text-2xl font-bold">Products</h1>{[1,2,3].map(i=><Skeleton key={i} className="h-16"/>)}</div>;
 
@@ -81,7 +120,10 @@ export default function Products() {
     <div className="space-y-4 animate-fade-in">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-2xl font-bold">Products</h1>
-        <Button onClick={openCreate}><Plus className="mr-2 h-4 w-4" />Add Product</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExportCSV}><Download className="mr-2 h-4 w-4" />Export CSV</Button>
+          <Button onClick={openCreate}><Plus className="mr-2 h-4 w-4" />Add Product</Button>
+        </div>
       </div>
 
       <div className="relative max-w-sm">
@@ -98,6 +140,7 @@ export default function Products() {
                 <TableHead>SKU</TableHead>
                 <TableHead className="text-right">Price</TableHead>
                 <TableHead className="text-right">Stock</TableHead>
+                <TableHead>Sections</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -111,6 +154,7 @@ export default function Products() {
                   <TableCell className="text-right">
                     <Badge variant={p.stock < 10 ? "destructive" : "secondary"}>{p.stock}</Badge>
                   </TableCell>
+                  <TableCell>{sectionBadges(p)}</TableCell>
                   <TableCell>
                     <Badge variant={p.isActive ? "default" : "outline"}>{p.isActive ? "Active" : "Inactive"}</Badge>
                   </TableCell>
@@ -120,7 +164,7 @@ export default function Products() {
                   </TableCell>
                 </TableRow>
               ))}
-              {filtered.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No products found</TableCell></TableRow>}
+              {filtered.length === 0 && <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No products found</TableCell></TableRow>}
             </TableBody>
           </Table>
         </CardContent>
@@ -136,34 +180,16 @@ export default function Products() {
               <Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label>Slug</Label>
-                <Input value={form.slug} onChange={e => setForm({ ...form, slug: e.target.value })} />
-              </div>
-              <div className="grid gap-2">
-                <Label>SKU</Label>
-                <Input value={form.sku} onChange={e => setForm({ ...form, sku: e.target.value })} />
-              </div>
+              <div className="grid gap-2"><Label>Slug</Label><Input value={form.slug} onChange={e => setForm({ ...form, slug: e.target.value })} /></div>
+              <div className="grid gap-2"><Label>SKU</Label><Input value={form.sku} onChange={e => setForm({ ...form, sku: e.target.value })} /></div>
             </div>
-            <div className="grid gap-2">
-              <Label>Description</Label>
-              <Textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
+            <div className="grid gap-2"><Label>Description</Label><Textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2"><Label>Price (NPR)</Label><Input type="number" value={form.price} onChange={e => setForm({ ...form, price: +e.target.value })} /></div>
+              <div className="grid gap-2"><Label>Compare At</Label><Input type="number" value={form.compareAt} onChange={e => setForm({ ...form, compareAt: +e.target.value })} /></div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label>Price (NPR)</Label>
-                <Input type="number" value={form.price} onChange={e => setForm({ ...form, price: +e.target.value })} />
-              </div>
-              <div className="grid gap-2">
-                <Label>Compare At</Label>
-                <Input type="number" value={form.compareAt} onChange={e => setForm({ ...form, compareAt: +e.target.value })} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label>Stock</Label>
-                <Input type="number" value={form.stock} onChange={e => setForm({ ...form, stock: +e.target.value })} />
-              </div>
+              <div className="grid gap-2"><Label>Stock</Label><Input type="number" value={form.stock} onChange={e => setForm({ ...form, stock: +e.target.value })} /></div>
               <div className="grid gap-2">
                 <Label>Category</Label>
                 <Select value={form.categoryId} onValueChange={v => setForm({ ...form, categoryId: v })}>
@@ -174,9 +200,38 @@ export default function Products() {
                 </Select>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Switch checked={form.isActive} onCheckedChange={v => setForm({ ...form, isActive: v })} />
-              <Label>Active</Label>
+
+            {/* Section Management */}
+            <div className="rounded-lg border p-4 space-y-3">
+              <Label className="text-sm font-semibold">Section Management</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex items-center gap-2">
+                  <Switch checked={form.isActive} onCheckedChange={v => setForm({ ...form, isActive: v })} />
+                  <Label className="text-sm">Active</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch checked={form.isFeatured} onCheckedChange={v => setForm({ ...form, isFeatured: v })} />
+                  <Label className="text-sm">Featured</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch checked={form.isBestSeller} onCheckedChange={v => setForm({ ...form, isBestSeller: v })} />
+                  <Label className="text-sm">Best Seller</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch checked={form.isNewArrival} onCheckedChange={v => setForm({ ...form, isNewArrival: v })} />
+                  <Label className="text-sm">New Arrival</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch checked={form.isFlashDeal} onCheckedChange={v => setForm({ ...form, isFlashDeal: v })} />
+                  <Label className="text-sm">Flash Deal</Label>
+                </div>
+              </div>
+              {form.isFlashDeal && (
+                <div className="grid gap-2">
+                  <Label className="text-sm">Flash Deal Ends</Label>
+                  <Input type="datetime-local" value={form.flashDealEnd} onChange={e => setForm({ ...form, flashDealEnd: e.target.value })} />
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>

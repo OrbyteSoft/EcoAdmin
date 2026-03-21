@@ -1,69 +1,136 @@
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
-import { formatDate } from "@/lib/format";
+import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Pencil, Trash2, Search, Eye } from "lucide-react";
-import { toast } from "sonner";
+import { Pencil, Trash2, Search, RefreshCcw, UserPlus } from "lucide-react";
+import { useUsers, Role, User } from "@/contexts/UserContext";
 
 export default function UsersPage() {
-  const qc = useQueryClient();
+  const {
+    users,
+    isLoading,
+    fetchAllUsers,
+    createUser,
+    updateUser,
+    deleteUser,
+  } = useUsers();
+
   const [search, setSearch] = useState("");
-  const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [editing, setEditing] = useState<any>(null);
-  const [form, setForm] = useState({ name: "", email: "", role: "user" });
-  const [detailUser, setDetailUser] = useState<any>(null);
 
-  const { data, isLoading } = useQuery({ queryKey: ["users"], queryFn: () => api<any>("/users") });
-  const users = (Array.isArray(data) ? data : data?.data || []) as any[];
-  const filtered = users.filter(u => u.name?.toLowerCase().includes(search.toLowerCase()) || u.email?.toLowerCase().includes(search.toLowerCase()));
+  // States for Dialogs
+  const [roleDialogOpen, setRoleDialogOpen] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
-  const saveMutation = useMutation({
-    mutationFn: (body: any) => api(`/users/${editing.id}`, { method: "PATCH", body: JSON.stringify(body) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["users"] }); setDialogOpen(false); toast.success("User updated"); },
-    onError: (e: Error) => toast.error(e.message),
+  // Form State for New User
+  const [newUser, setNewUser] = useState({
+    name: "",
+    email: "",
+    password: "",
+    role: Role.USER,
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => api(`/users/${id}`, { method: "DELETE" }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["users"] }); setDeleteId(null); toast.success("User deleted"); },
-    onError: (e: Error) => toast.error(e.message),
-  });
+  useEffect(() => {
+    fetchAllUsers();
+  }, [fetchAllUsers]);
 
-  const openEdit = (u: any) => {
-    setEditing(u);
-    setForm({ name: u.name, email: u.email, role: u.role || "user" });
-    setDialogOpen(true);
-  };
+  const filtered = users.filter(
+    (u) =>
+      u.name?.toLowerCase().includes(search.toLowerCase()) ||
+      u.email?.toLowerCase().includes(search.toLowerCase()),
+  );
 
-  const viewDetail = async (u: any) => {
+  const handleCreateUser = async () => {
     try {
-      const detail = await api(`/users/${u.id}`);
-      setDetailUser(detail);
-    } catch {
-      setDetailUser(u);
+      await createUser(newUser);
+      setCreateDialogOpen(false);
+      setNewUser({ name: "", email: "", password: "", role: Role.USER });
+    } catch (err) {
+      /* Error handled in context toast */
     }
   };
 
-  if (isLoading) return <div className="space-y-4"><h1 className="text-2xl font-bold">Users</h1>{[1,2,3].map(i=><Skeleton key={i} className="h-16"/>)}</div>;
+  const handleRoleUpdate = async () => {
+    if (selectedUser) {
+      await updateUser(selectedUser.id, { role: selectedUser.role });
+      setRoleDialogOpen(false);
+    }
+  };
+
+  if (isLoading && users.length === 0)
+    return (
+      <div className="p-8 space-y-4">
+        <Skeleton className="h-10 w-48" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
 
   return (
-    <div className="space-y-4 animate-fade-in">
-      <h1 className="text-2xl font-bold">Users</h1>
+    <div className="space-y-4 p-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold">User Management</h1>
+          <p className="text-sm text-muted-foreground">
+            Add new staff or manage existing user roles.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={fetchAllUsers}>
+            <RefreshCcw className="mr-2 h-4 w-4" />
+            Refresh
+          </Button>
+          <Button size="sm" onClick={() => setCreateDialogOpen(true)}>
+            <UserPlus className="mr-2 h-4 w-4" />
+            Add User
+          </Button>
+        </div>
+      </div>
 
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input placeholder="Search users..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+        <Input
+          placeholder="Search users..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-9"
+        />
       </div>
 
       <Card>
@@ -71,92 +138,173 @@ export default function UsersPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Email</TableHead>
+                <TableHead>User</TableHead>
                 <TableHead>Role</TableHead>
-                <TableHead>Joined</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map(u => (
+              {filtered.map((u) => (
                 <TableRow key={u.id}>
-                  <TableCell className="font-medium">{u.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{u.email}</TableCell>
-                  <TableCell><Badge variant={u.role === "admin" ? "default" : "secondary"}>{u.role}</Badge></TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{u.createdAt ? formatDate(u.createdAt) : "—"}</TableCell>
+                  <TableCell>
+                    <div className="font-medium">{u.name || "Unnamed"}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {u.email}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={u.role === Role.ADMIN ? "default" : "secondary"}
+                    >
+                      {u.role}
+                    </Badge>
+                  </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => viewDetail(u)}><Eye className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" onClick={() => openEdit(u)}><Pencil className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" onClick={() => setDeleteId(u.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        setSelectedUser(u);
+                        setRoleDialogOpen(true);
+                      }}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setDeleteId(u.id)}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
-              {filtered.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No users found</TableCell></TableRow>}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
 
-      {/* Edit Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>Edit User</DialogTitle></DialogHeader>
-          <div className="grid gap-4 py-2">
-            <div className="grid gap-2"><Label>Name</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></div>
-            <div className="grid gap-2"><Label>Email</Label><Input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></div>
-            <div className="grid gap-2">
-              <Label>Role</Label>
-              <Select value={form.role} onValueChange={v => setForm({ ...form, role: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+      {/* CREATE USER DIALOG */}
+      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add New User</DialogTitle>
+            <DialogDescription>
+              Create a new account and assign a role.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1">
+              <Label>Full Name</Label>
+              <Input
+                value={newUser.name}
+                onChange={(e) =>
+                  setNewUser({ ...newUser, name: e.target.value })
+                }
+                placeholder="John Doe"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Email Address</Label>
+              <Input
+                type="email"
+                value={newUser.email}
+                onChange={(e) =>
+                  setNewUser({ ...newUser, email: e.target.value })
+                }
+                placeholder="john@example.com"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Password</Label>
+              <Input
+                type="password"
+                value={newUser.password}
+                onChange={(e) =>
+                  setNewUser({ ...newUser, password: e.target.value })
+                }
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Assign Role</Label>
+              <Select
+                value={newUser.role}
+                onValueChange={(v: Role) => setNewUser({ ...newUser, role: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="user">User</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="moderator">Moderator</SelectItem>
+                  <SelectItem value={Role.USER}>USER (Customer)</SelectItem>
+                  <SelectItem value={Role.ADMIN}>ADMIN (Staff)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={() => saveMutation.mutate(form)} disabled={saveMutation.isPending}>{saveMutation.isPending ? "Saving…" : "Save"}</Button>
+            <Button
+              variant="outline"
+              onClick={() => setCreateDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleCreateUser}>Create Account</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* User Detail Dialog */}
-      <Dialog open={!!detailUser} onOpenChange={() => setDetailUser(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>User Detail</DialogTitle></DialogHeader>
-          {detailUser && (
-            <div className="space-y-3 text-sm">
-              <div><span className="text-muted-foreground">Name:</span> {detailUser.name}</div>
-              <div><span className="text-muted-foreground">Email:</span> {detailUser.email}</div>
-              <div><span className="text-muted-foreground">Role:</span> <Badge variant="secondary">{detailUser.role}</Badge></div>
-              <div><span className="text-muted-foreground">Joined:</span> {detailUser.createdAt ? formatDate(detailUser.createdAt) : "—"}</div>
-              {detailUser.addresses?.length > 0 && (
-                <>
-                  <h4 className="font-semibold pt-2">Addresses</h4>
-                  {detailUser.addresses.map((a: any, i: number) => (
-                    <div key={i} className="rounded-lg border border-border p-3 text-sm">
-                      <p>{a.line1}{a.line2 ? `, ${a.line2}` : ""}</p>
-                      <p>{a.city}, {a.state} {a.zipCode}</p>
-                      <p>{a.country}</p>
-                    </div>
-                  ))}
-                </>
-              )}
+      {/* UPDATE ROLE DIALOG */}
+      <Dialog open={roleDialogOpen} onOpenChange={setRoleDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Update User Role</DialogTitle>
+            <DialogDescription>
+              Modify permissions for {selectedUser?.email}.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedUser && (
+            <div className="py-4 space-y-2">
+              <Label>System Role</Label>
+              <Select
+                value={selectedUser.role}
+                onValueChange={(v: Role) =>
+                  setSelectedUser({ ...selectedUser, role: v })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={Role.USER}>USER</SelectItem>
+                  <SelectItem value={Role.ADMIN}>ADMIN</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           )}
+          <DialogFooter>
+            <Button onClick={handleRoleUpdate}>Save Changes</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* DELETE ALERT */}
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent>
-          <AlertDialogHeader><AlertDialogTitle>Delete user?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone.</AlertDialogDescription></AlertDialogHeader>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete user?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action is permanent and cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => deleteId && deleteMutation.mutate(deleteId)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
+            <AlertDialogAction
+              onClick={() => deleteId && deleteUser(deleteId)}
+              className="bg-destructive"
+            >
+              Delete
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

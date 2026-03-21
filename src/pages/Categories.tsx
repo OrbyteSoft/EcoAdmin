@@ -1,145 +1,300 @@
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { useState, useEffect, ChangeEvent } from "react";
 import { downloadCSV } from "@/lib/csv";
 import { Card, CardContent } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Pencil, Trash2, Search, Download, ChevronRight, FolderOpen, Folder } from "lucide-react";
-import { toast } from "sonner";
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  Search,
+  Download,
+  ChevronRight,
+  FolderOpen,
+  Folder,
+  RefreshCcw,
+  Upload,
+  Loader2,
+  X,
+} from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { useCategories, Category } from "@/contexts/CategoryContext";
+import { uploadImage } from "@/utils/cloudinary";
 
-interface Category {
-  id: string;
-  name: string;
-  slug: string;
-  description?: string;
-  imageUrl?: string;
-  parentId?: string | null;
-  isActive: boolean;
-  children?: Category[];
-}
+const emptyForm = {
+  name: "",
+  slug: "",
+  description: "",
+  imageUrl: "",
+  parentId: "none",
+  isActive: true,
+};
 
-const emptyForm = { name: "", slug: "", description: "", imageUrl: "", parentId: "", isActive: true };
-
-function CategoryTreeNode({ category, allCategories, depth = 0, onEdit, onDelete }: {
+function CategoryTreeNode({
+  category,
+  onEdit,
+  onDelete,
+}: {
   category: Category;
-  allCategories: Category[];
-  depth?: number;
   onEdit: (c: Category) => void;
   onDelete: (id: string) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
-  const children = allCategories.filter(c => c.parentId === category.id);
-  const hasChildren = children.length > 0;
+  const hasChildren = category.children && category.children.length > 0;
 
   return (
     <div>
-      <div
-        className={cn(
-          "flex items-center gap-2 py-2 px-3 rounded-md hover:bg-muted/50 group transition-colors",
-        )}
-        style={{ paddingLeft: `${depth * 24 + 12}px` }}
-      >
+      <div className="flex items-center gap-2 py-2 px-3 rounded-md hover:bg-muted/50 group transition-colors">
         <button
           onClick={() => setExpanded(!expanded)}
-          className={cn("p-0.5 rounded transition-transform", hasChildren ? "visible" : "invisible")}
+          className={cn(
+            "p-0.5 rounded transition-transform",
+            hasChildren ? "visible" : "invisible",
+          )}
         >
-          <ChevronRight className={cn("h-4 w-4 text-muted-foreground transition-transform", expanded && "rotate-90")} />
+          <ChevronRight
+            className={cn(
+              "h-4 w-4 text-muted-foreground transition-transform",
+              expanded && "rotate-90",
+            )}
+          />
         </button>
-        {hasChildren ? <FolderOpen className="h-4 w-4 text-primary" /> : <Folder className="h-4 w-4 text-muted-foreground" />}
+        {hasChildren ? (
+          <FolderOpen className="h-4 w-4 text-primary" />
+        ) : (
+          <Folder className="h-4 w-4 text-muted-foreground" />
+        )}
         <span className="font-medium flex-1">{category.name}</span>
-        <span className="text-xs text-muted-foreground">{category.slug}</span>
-        <Badge variant={category.isActive ? "default" : "outline"} className="text-xs">
+        <span className="text-xs text-muted-foreground mr-2">
+          {category.slug}
+        </span>
+        <Badge
+          variant={category.isActive ? "default" : "outline"}
+          className="text-xs"
+        >
           {category.isActive ? "Active" : "Inactive"}
         </Badge>
-        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(category)}><Pencil className="h-3 w-3" /></Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onDelete(category.id)}><Trash2 className="h-3 w-3 text-destructive" /></Button>
+        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 ml-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => onEdit(category)}
+          >
+            <Pencil className="h-3 w-3" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => onDelete(category.id)}
+          >
+            <Trash2 className="h-3 w-3 text-destructive" />
+          </Button>
         </div>
       </div>
-      {expanded && children.map(child => (
-        <CategoryTreeNode key={child.id} category={child} allCategories={allCategories} depth={depth + 1} onEdit={onEdit} onDelete={onDelete} />
-      ))}
+      {expanded && hasChildren && (
+        <div className="ml-6 border-l border-muted pl-2">
+          {category.children?.map((child) => (
+            <CategoryTreeNode
+              key={child.id}
+              category={child}
+              onEdit={onEdit}
+              onDelete={onDelete}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
 export default function Categories() {
-  const qc = useQueryClient();
+  const {
+    categories,
+    categoryTree,
+    isLoading,
+    fetchCategories,
+    fetchCategoryTree,
+    createCategory,
+    updateCategory,
+    deleteCategory,
+  } = useCategories();
+
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Category | null>(null);
   const [form, setForm] = useState(emptyForm);
 
-  const { data, isLoading } = useQuery({ queryKey: ["categories"], queryFn: () => api<any>("/categories") });
-  const categories: Category[] = Array.isArray(data) ? data : data?.data || [];
-  const filtered = categories.filter(c => c.name.toLowerCase().includes(search.toLowerCase()));
-  const rootCategories = categories.filter(c => !c.parentId);
+  // New states for image handling
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
-  const saveMutation = useMutation({
-    mutationFn: (body: any) =>
-      editing ? api(`/categories/${editing.id}`, { method: "PATCH", body: JSON.stringify(body) }) : api("/categories", { method: "POST", body: JSON.stringify(body) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["categories"] }); setDialogOpen(false); toast.success(editing ? "Updated" : "Created"); },
-    onError: (e: Error) => toast.error(e.message),
-  });
+  useEffect(() => {
+    fetchCategories();
+    fetchCategoryTree();
+  }, [fetchCategories, fetchCategoryTree]);
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => api(`/categories/${id}`, { method: "DELETE" }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["categories"] }); setDeleteId(null); toast.success("Deleted"); },
-    onError: (e: Error) => toast.error(e.message),
-  });
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setSelectedFile(e.target.files[0]);
+    }
+  };
 
-  const openCreate = () => { setEditing(null); setForm(emptyForm); setDialogOpen(true); };
-  const openEdit = (c: Category) => {
-    setEditing(c);
-    setForm({ name: c.name, slug: c.slug, description: c.description || "", imageUrl: c.imageUrl || "", parentId: c.parentId || "", isActive: c.isActive });
+  const handleSave = async () => {
+    try {
+      setIsUploading(true);
+      let finalImageUrl = form.imageUrl;
+
+      // 1. If a new file was selected, upload it first
+      if (selectedFile) {
+        const uploadData = await uploadImage(selectedFile, "categories");
+        finalImageUrl = uploadData.secure_url;
+      }
+
+      // 2. Create payload
+      const payload: any = {
+        ...form,
+        imageUrl: finalImageUrl,
+        parentId: form.parentId === "none" ? null : form.parentId,
+      };
+
+      if (!payload.imageUrl || payload.imageUrl.trim() === "") {
+        delete payload.imageUrl;
+      }
+
+      // 3. Save to DB
+      if (editing) {
+        await updateCategory(editing.id, payload);
+      } else {
+        await createCategory(payload);
+      }
+
+      setDialogOpen(false);
+      setSelectedFile(null);
+    } catch (error) {
+      console.error("Upload/Save failed", error);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const openCreate = () => {
+    setEditing(null);
+    setForm(emptyForm);
+    setSelectedFile(null);
     setDialogOpen(true);
   };
 
-  const handleSave = () => {
-    const body: any = { ...form };
-    if (!body.parentId) delete body.parentId;
-    if (!body.imageUrl) delete body.imageUrl;
-    saveMutation.mutate(body);
+  const openEdit = (c: Category) => {
+    setEditing(c);
+    setForm({
+      name: c.name,
+      slug: c.slug || "",
+      description: c.description || "",
+      imageUrl: c.imageUrl || "",
+      parentId: c.parentId || "none",
+      isActive: c.isActive,
+    });
+    setSelectedFile(null);
+    setDialogOpen(true);
   };
 
   const handleExportCSV = () => {
-    const headers = ["Name", "Slug", "Description", "Parent", "Active"];
-    const rows = categories.map(c => [
-      c.name, c.slug, c.description || "",
-      c.parentId ? categories.find(p => p.id === c.parentId)?.name || "" : "",
+    const headers = ["Name", "Slug", "Description", "Active"];
+    const rows = categories.map((c) => [
+      c.name,
+      c.slug,
+      c.description || "",
       c.isActive ? "Yes" : "No",
     ]);
     downloadCSV("categories", headers, rows);
-    toast.success("Categories exported");
   };
 
-  if (isLoading) return <div className="space-y-4"><h1 className="text-2xl font-bold">Categories</h1>{[1,2,3].map(i=><Skeleton key={i} className="h-16"/>)}</div>;
+  if (isLoading && categories.length === 0)
+    return (
+      <div className="space-y-4 p-6">
+        <Skeleton className="h-10 w-48" />
+        {[1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-16 w-full" />
+        ))}
+      </div>
+    );
 
   return (
-    <div className="space-y-4 animate-fade-in">
+    <div className="space-y-4 animate-fade-in p-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-2xl font-bold">Categories</h1>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleExportCSV}><Download className="mr-2 h-4 w-4" />Export CSV</Button>
-          <Button onClick={openCreate}><Plus className="mr-2 h-4 w-4" />Add Category</Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              fetchCategories();
+              fetchCategoryTree();
+            }}
+          >
+            <RefreshCcw className="mr-2 h-4 w-4" /> Sync
+          </Button>
+          <Button variant="outline" onClick={handleExportCSV}>
+            <Download className="mr-2 h-4 w-4" /> Export
+          </Button>
+          <Button onClick={openCreate}>
+            <Plus className="mr-2 h-4 w-4" /> Add Category
+          </Button>
         </div>
       </div>
 
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input placeholder="Search categories..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+        <input
+          placeholder="Search categories..."
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            fetchCategories({ search: e.target.value });
+          }}
+          className="flex h-10 w-full rounded-md border border-input bg-background px-9 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+        />
       </div>
 
       <Tabs defaultValue="table">
@@ -154,27 +309,56 @@ export default function Categories() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>Image</TableHead>
                     <TableHead>Name</TableHead>
                     <TableHead>Slug</TableHead>
-                    <TableHead>Parent</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filtered.map(c => (
+                  {categories.map((c) => (
                     <TableRow key={c.id}>
+                      <TableCell>
+                        {c.imageUrl ? (
+                          <img
+                            src={c.imageUrl}
+                            alt={c.name}
+                            className="h-10 w-10 rounded object-cover border"
+                          />
+                        ) : (
+                          <div className="h-10 w-10 rounded bg-muted flex items-center justify-center text-[10px] text-muted-foreground">
+                            No Img
+                          </div>
+                        )}
+                      </TableCell>
                       <TableCell className="font-medium">{c.name}</TableCell>
-                      <TableCell className="text-muted-foreground">{c.slug}</TableCell>
-                      <TableCell>{c.parentId ? categories.find(p => p.id === c.parentId)?.name || "—" : "—"}</TableCell>
-                      <TableCell><Badge variant={c.isActive ? "default" : "outline"}>{c.isActive ? "Active" : "Inactive"}</Badge></TableCell>
+                      <TableCell className="text-muted-foreground text-xs">
+                        {c.slug}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={c.isActive ? "default" : "outline"}>
+                          {c.isActive ? "Active" : "Inactive"}
+                        </Badge>
+                      </TableCell>
                       <TableCell className="text-right">
-                        <Button variant="ghost" size="icon" onClick={() => openEdit(c)}><Pencil className="h-4 w-4" /></Button>
-                        <Button variant="ghost" size="icon" onClick={() => setDeleteId(c.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openEdit(c)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setDeleteId(c.id)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
-                  {filtered.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No categories found</TableCell></TableRow>}
                 </TableBody>
               </Table>
             </CardContent>
@@ -184,11 +368,18 @@ export default function Categories() {
         <TabsContent value="tree">
           <Card>
             <CardContent className="py-4">
-              {rootCategories.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">No categories found</p>
+              {categoryTree.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">
+                  No categories found
+                </p>
               ) : (
-                rootCategories.map(c => (
-                  <CategoryTreeNode key={c.id} category={c} allCategories={categories} onEdit={openEdit} onDelete={id => setDeleteId(id)} />
+                categoryTree.map((c) => (
+                  <CategoryTreeNode
+                    key={c.id}
+                    category={c}
+                    onEdit={openEdit}
+                    onDelete={setDeleteId}
+                  />
                 ))
               )}
             </CardContent>
@@ -196,42 +387,176 @@ export default function Categories() {
         </TabsContent>
       </Tabs>
 
+      {/* CREATE/EDIT DIALOG */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-lg">
-          <DialogHeader><DialogTitle>{editing ? "Edit Category" : "New Category"}</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>
+              {editing ? "Edit Category" : "New Category"}
+            </DialogTitle>
+            <DialogDescription>
+              Provide the details below to{" "}
+              {editing ? "update the existing" : "create a new"} category.
+            </DialogDescription>
+          </DialogHeader>
+
           <div className="grid gap-4 py-2">
-            <div className="grid gap-2"><Label>Name</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></div>
-            <div className="grid gap-2"><Label>Slug</Label><Input value={form.slug} onChange={e => setForm({ ...form, slug: e.target.value })} /></div>
-            <div className="grid gap-2"><Label>Description</Label><Input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></div>
-            <div className="grid gap-2"><Label>Image URL</Label><Input value={form.imageUrl} onChange={e => setForm({ ...form, imageUrl: e.target.value })} /></div>
+            <div className="grid gap-2">
+              <Label htmlFor="cat-name">Name</Label>
+              <Input
+                id="cat-name"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="cat-slug">Slug (Optional)</Label>
+              <Input
+                id="cat-slug"
+                value={form.slug}
+                placeholder="electronics-gadgets"
+                onChange={(e) => setForm({ ...form, slug: e.target.value })}
+              />
+            </div>
             <div className="grid gap-2">
               <Label>Parent Category</Label>
-              <Select value={form.parentId} onValueChange={v => setForm({ ...form, parentId: v })}>
-                <SelectTrigger><SelectValue placeholder="None (root)" /></SelectTrigger>
+              <Select
+                value={form.parentId}
+                onValueChange={(v) => setForm({ ...form, parentId: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="None (root)" />
+                </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
-                  {categories.filter(c => c.id !== editing?.id).map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                  <SelectItem value="none">None (Root)</SelectItem>
+                  {categories
+                    .filter((c) => c.id !== editing?.id)
+                    .map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex items-center gap-2">
-              <Switch checked={form.isActive} onCheckedChange={v => setForm({ ...form, isActive: v })} />
-              <Label>Active</Label>
+            <div className="grid gap-2">
+              <Label htmlFor="cat-desc">Description</Label>
+              <Input
+                id="cat-desc"
+                value={form.description}
+                onChange={(e) =>
+                  setForm({ ...form, description: e.target.value })
+                }
+              />
+            </div>
+
+            {/* IMAGE UPLOAD SECTION */}
+            <div className="grid gap-2">
+              <Label>Category Image</Label>
+              <div className="flex flex-col gap-3">
+                {/* Preview existing or newly selected image */}
+                {(selectedFile || form.imageUrl) && (
+                  <div className="relative w-24 h-24 rounded-md border overflow-hidden group">
+                    <img
+                      src={
+                        selectedFile
+                          ? URL.createObjectURL(selectedFile)
+                          : form.imageUrl
+                      }
+                      alt="Preview"
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      onClick={() => {
+                        setSelectedFile(null);
+                        setForm({ ...form, imageUrl: "" });
+                      }}
+                      className="absolute top-1 right-1 bg-destructive p-1 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="cat-image-file"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleFileChange}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      document.getElementById("cat-image-file")?.click()
+                    }
+                  >
+                    <Upload className="mr-2 h-4 w-4" />
+                    {form.imageUrl || selectedFile
+                      ? "Change Image"
+                      : "Upload Image"}
+                  </Button>
+                  {selectedFile && (
+                    <span className="text-xs text-muted-foreground truncate max-w-[150px]">
+                      {selectedFile.name}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 pt-2">
+              <Switch
+                id="cat-active"
+                checked={form.isActive}
+                onCheckedChange={(v) => setForm({ ...form, isActive: v })}
+              />
+              <Label htmlFor="cat-active">Active</Label>
             </div>
           </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave} disabled={saveMutation.isPending}>{saveMutation.isPending ? "Saving…" : "Save"}</Button>
+            <Button
+              variant="outline"
+              onClick={() => setDialogOpen(false)}
+              disabled={isUploading}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={isUploading}>
+              {isUploading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                "Save Changes"
+              )}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* DELETE DIALOG */}
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent>
-          <AlertDialogHeader><AlertDialogTitle>Delete category?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone.</AlertDialogDescription></AlertDialogHeader>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Category?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. Subcategories may be affected.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => deleteId && deleteMutation.mutate(deleteId)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
+            <AlertDialogAction
+              onClick={() => deleteId && deleteCategory(deleteId)}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -1,5 +1,11 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { api, setTokens, clearTokens } from "@/lib/api";
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+} from "react";
+import { api, clearTokens, setTokens, getToken } from "@/lib/api";
 
 interface User {
   id: string;
@@ -12,7 +18,7 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
+  logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -22,46 +28,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    let isMounted = true;
+    const restoreSession = async () => {
+      const token = getToken();
 
-    const initializeAuth = async () => {
-      const token = localStorage.getItem("access_token");
+      // If no token exists, immediately stop loading.
+      // Do not call api() as it might trigger redirect logic.
       if (!token) {
-        if (isMounted) setIsLoading(false);
+        setIsLoading(false);
         return;
       }
+
       try {
-        const userData = await api<User>("/auth/me");
-        if (isMounted) setUser(userData);
-      } catch {
-        // api() already attempts token refresh on 401 before throwing
-        clearTokens();
-        if (isMounted) setUser(null);
+        const data = await api<User>("/auth/me");
+
+        if (data.role !== "ADMIN") {
+          clearTokens();
+          setUser(null);
+        } else {
+          setUser(data);
+        }
+      } catch (err) {
+        console.error("Session restore failed:", err);
+        // api() utility already handles clearTokens and redirect for 401s
+        setUser(null);
       } finally {
-        if (isMounted) setIsLoading(false);
+        setIsLoading(false);
       }
     };
 
-    initializeAuth();
-
-    return () => { isMounted = false; };
+    restoreSession();
   }, []);
 
   const login = async (email: string, password: string) => {
-    const data = await api<{ accessToken: string; refreshToken: string; user: User }>(
-      "/auth/login",
-      { method: "POST", body: JSON.stringify({ email, password }) }
-    );
-    setTokens(data.accessToken, data.refreshToken);
+    const data = await api<{
+      accessToken: string;
+      refreshToken: string;
+      user: User;
+    }>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
+
+    if (data.user.role !== "ADMIN") {
+      throw new Error("Only Administrators are allowed here.");
+    }
+
+    setTokens(data.accessToken, data.refreshToken, data.user.role);
     setUser(data.user);
   };
 
-  const logout = async () => {
-    try {
-      await api("/auth/logout", { method: "POST" });
-    } catch { /* ignore */ }
+  const logout = () => {
     clearTokens();
     setUser(null);
+    window.location.href = "/login";
   };
 
   return (
@@ -72,7 +91,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
-  return ctx;
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be used inside AuthProvider");
+  }
+  return context;
 }

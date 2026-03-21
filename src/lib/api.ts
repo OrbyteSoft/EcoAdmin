@@ -1,33 +1,49 @@
 const BASE_URL = "http://localhost:3000/api/v1";
 
-function getToken(): string | null {
+// Prevents the app from trying to redirect to login multiple times simultaneously
+let isRedirecting = false;
+
+export function getToken() {
   return localStorage.getItem("access_token");
 }
 
-export function setTokens(access: string, refresh: string) {
+export function getRefreshToken() {
+  return localStorage.getItem("refresh_token");
+}
+
+export function getUserRole() {
+  return localStorage.getItem("user_role");
+}
+
+export function setTokens(access: string, refresh: string, role: string) {
   localStorage.setItem("access_token", access);
   localStorage.setItem("refresh_token", refresh);
+  localStorage.setItem("user_role", role);
 }
 
 export function clearTokens() {
   localStorage.removeItem("access_token");
   localStorage.removeItem("refresh_token");
+  localStorage.removeItem("user_role");
 }
 
-async function refreshToken(): Promise<boolean> {
-  const refresh = localStorage.getItem("refresh_token");
-  if (!refresh) return false;
+async function attemptRefresh(): Promise<boolean> {
+  const rt = getRefreshToken();
+  if (!rt) return false;
+
   try {
     const res = await fetch(`${BASE_URL}/auth/refresh`, {
       method: "POST",
       headers: {
+        Authorization: `Bearer ${rt}`,
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${refresh}`,
       },
     });
+
     if (!res.ok) return false;
+
     const data = await res.json();
-    setTokens(data.accessToken, data.refreshToken);
+    setTokens(data.accessToken, data.refreshToken, data.user.role);
     return true;
   } catch {
     return false;
@@ -36,34 +52,55 @@ async function refreshToken(): Promise<boolean> {
 
 export async function api<T = any>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
 ): Promise<T> {
-  const token = getToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(options.headers as Record<string, string>),
   };
+
+  const token = getToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  let res = await fetch(`${BASE_URL}${endpoint}`, { ...options, headers });
+  let res = await fetch(`${BASE_URL}${endpoint}`, {
+    ...options,
+    headers,
+  });
 
-  if (res.status === 401) {
-    const refreshed = await refreshToken();
+  // Handle Token Expiration
+  if (res.status === 401 && !endpoint.includes("/auth/refresh")) {
+    const refreshed = await attemptRefresh();
+
     if (refreshed) {
+      // Retry the original request with new token
       headers["Authorization"] = `Bearer ${getToken()}`;
-      res = await fetch(`${BASE_URL}${endpoint}`, { ...options, headers });
+      res = await fetch(`${BASE_URL}${endpoint}`, {
+        ...options,
+        headers,
+      });
     } else {
+      // REFRESH FAILED: Clean up and redirect
       clearTokens();
-      window.location.href = "/login";
-      throw new Error("Session expired");
+
+      const isLoginPage = window.location.pathname.includes("/login");
+
+      if (!isLoginPage && !isRedirecting) {
+        isRedirecting = true;
+        window.location.href = "/login?error=expired";
+      }
+
+      throw new Error("Session Expired");
     }
   }
 
+  const data = await res.json().catch(() => ({}));
+
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || `API Error ${res.status}`);
+    if (res.status === 403) {
+      throw new Error("Access Denied: Admins Only");
+    }
+    throw new Error(data.message || "Something went wrong");
   }
 
-  if (res.status === 204) return {} as T;
-  return res.json();
+  return data;
 }

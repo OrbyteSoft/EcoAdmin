@@ -1,238 +1,353 @@
-import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+"use client";
+
+import React, { useMemo, useEffect } from "react";
+import { usePayments } from "@/contexts/PaymentContext";
+import { useOrders } from "@/contexts/OrderContext";
+import { useProducts } from "@/contexts/ProductContext";
+import { useUsers } from "@/contexts/UserContext";
 import { formatNPR } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DollarSign, ShoppingCart, Package, Users, AlertTriangle } from "lucide-react";
-import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import {
+  DollarSign,
+  ShoppingCart,
+  Package,
+  Users,
+  AlertTriangle,
+  TrendingUp,
+} from "lucide-react";
+import {
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from "recharts";
 
-const CHART_COLORS = ["hsl(172,66%,50%)", "hsl(38,92%,50%)", "hsl(270,70%,55%)", "hsl(142,71%,45%)", "hsl(0,84%,60%)"];
+const CHART_COLORS = ["#10b981", "#f59e0b", "#6366f1", "#8b5cf6", "#ef4444"];
 
-function StatCard({ title, value, icon: Icon, gradient }: { title: string; value: string; icon: any; gradient: string }) {
+function StatCard({
+  title,
+  value,
+  icon: Icon,
+  gradient,
+}: {
+  title: string;
+  value: string;
+  icon: any;
+  gradient: string;
+}) {
   return (
-    <Card className={`${gradient} border-0 shadow-lg`}>
-      <CardContent className="flex items-center gap-4 p-6">
-        <div className="rounded-xl bg-white/20 p-3">
+    <Card
+      className={`${gradient} border-0 shadow-md text-white overflow-hidden relative`}
+    >
+      <CardContent className="flex items-center gap-4 p-6 relative z-10">
+        <div className="rounded-xl bg-white/20 p-3 backdrop-blur-sm">
           <Icon className="h-6 w-6" />
         </div>
         <div>
-          <p className="text-sm font-medium opacity-90">{title}</p>
+          <p className="text-xs font-medium uppercase tracking-wider opacity-80">
+            {title}
+          </p>
           <p className="text-2xl font-bold">{value}</p>
         </div>
       </CardContent>
+      <div className="absolute right-[-10%] bottom-[-20%] opacity-10">
+        <Icon size={120} />
+      </div>
     </Card>
   );
 }
 
 export default function Dashboard() {
-  const { data: orders, isLoading: lo } = useQuery({ queryKey: ["orders"], queryFn: () => api<any>("/orders") });
-  const { data: products, isLoading: lp } = useQuery({ queryKey: ["products"], queryFn: () => api<any>("/products") });
-  const { data: users, isLoading: lu } = useQuery({ queryKey: ["users"], queryFn: () => api<any>("/users") });
+  const { payments, isLoading: lp, fetchAllPayments } = usePayments();
+  const { orders, isLoading: lo, fetchAllOrders } = useOrders();
+  const { products, loading: lpr, fetchProducts } = useProducts();
+  const { users, isLoading: lu, fetchAllUsers } = useUsers();
 
-  const isLoading = lo || lp || lu;
+  // Trigger data refresh on mount
+  useEffect(() => {
+    fetchAllOrders();
+    fetchAllPayments();
+    fetchAllUsers();
+    fetchProducts();
+  }, [fetchAllOrders, fetchAllPayments, fetchAllUsers, fetchProducts]);
 
-  // Compute stats
-  const orderList = Array.isArray(orders) ? orders : orders?.data || [];
-  const productList = Array.isArray(products) ? products : products?.data || [];
-  const userList = Array.isArray(users) ? users : users?.data || [];
+  const isLoading = lp || lo || lpr || lu;
 
-  const totalRevenue = orderList.reduce((s: number, o: any) => s + (o.total || 0), 0);
-  const totalOrders = orderList.length;
-  const totalProducts = productList.length;
-  const totalUsers = userList.length;
+  // --- Computed Analytics ---
+  const stats = useMemo(() => {
+    const totalRevenue = orders
+      .filter((o) => o.status !== "CANCELLED")
+      .reduce((acc, curr) => acc + curr.total, 0);
 
-  // Order status distribution
-  const statusCounts: Record<string, number> = {};
-  orderList.forEach((o: any) => { statusCounts[o.status] = (statusCounts[o.status] || 0) + 1; });
-  const statusData = Object.entries(statusCounts).map(([name, value]) => ({ name, value }));
+    const statusCounts = orders.reduce((acc: any, o) => {
+      acc[o.status] = (acc[o.status] || 0) + 1;
+      return acc;
+    }, {});
 
-  // Payment method distribution
-  const methodCounts: Record<string, number> = {};
-  orderList.forEach((o: any) => {
-    const m = o.payment?.method || o.paymentMethod || "Unknown";
-    methodCounts[m] = (methodCounts[m] || 0) + 1;
-  });
-  const methodData = Object.entries(methodCounts).map(([name, value]) => ({ name, value }));
+    const monthlyMap: Record<string, number> = {};
+    orders.forEach((o) => {
+      const date = new Date(o.createdAt);
+      const month = date.toLocaleString("default", { month: "short" });
+      monthlyMap[month] = (monthlyMap[month] || 0) + o.total;
+    });
 
-  // Monthly revenue (simple aggregation)
-  const monthlyMap: Record<string, number> = {};
-  orderList.forEach((o: any) => {
-    const d = new Date(o.createdAt);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    monthlyMap[key] = (monthlyMap[key] || 0) + (o.total || 0);
-  });
-  const monthlyRevenue = Object.entries(monthlyMap).sort().slice(-6).map(([month, revenue]) => ({ month, revenue }));
+    return {
+      totalRevenue,
+      statusData: Object.entries(statusCounts).map(([name, value]) => ({
+        name,
+        value,
+      })),
+      revenueData: Object.entries(monthlyMap).map(([month, revenue]) => ({
+        month,
+        revenue,
+      })),
+      lowStock: products.filter((p) => p.stock < 10).slice(0, 5),
+      recentOrders: [...orders]
+        .sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        )
+        .slice(0, 6),
+    };
+  }, [orders, products]);
 
-  // Monthly orders count
-  const monthlyOrderMap: Record<string, number> = {};
-  orderList.forEach((o: any) => {
-    const d = new Date(o.createdAt);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    monthlyOrderMap[key] = (monthlyOrderMap[key] || 0) + 1;
-  });
-  const monthlyOrders = Object.entries(monthlyOrderMap).sort().slice(-6).map(([month, count]) => ({ month, count }));
-
-  // Low stock products
-  const lowStock = productList.filter((p: any) => p.stock < 10).slice(0, 5);
-
-  // Recent orders
-  const recentOrders = [...orderList].sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 10);
-
-  if (isLoading) {
+  if (isLoading && orders.length === 0) {
     return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold">Dashboard</h1>
+      <div className="p-6 space-y-6">
+        <div className="h-8 w-48 bg-gray-200 animate-pulse rounded" />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-28" />)}
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-28 rounded-xl" />
+          ))}
         </div>
-        <div className="grid gap-4 lg:grid-cols-2">
-          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-72" />)}
+        <div className="grid gap-6 lg:grid-cols-7">
+          <Skeleton className="lg:col-span-4 h-[350px] rounded-xl" />
+          <Skeleton className="lg:col-span-3 h-[350px] rounded-xl" />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <h1 className="text-2xl font-bold">Dashboard</h1>
-
-      {/* Summary Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Total Revenue" value={formatNPR(totalRevenue)} icon={DollarSign} gradient="gradient-card-revenue" />
-        <StatCard title="Total Orders" value={totalOrders.toLocaleString()} icon={ShoppingCart} gradient="gradient-card-orders" />
-        <StatCard title="Total Products" value={totalProducts.toLocaleString()} icon={Package} gradient="gradient-card-products" />
-        <StatCard title="Total Users" value={totalUsers.toLocaleString()} icon={Users} gradient="gradient-card-users" />
+    <div className="p-6 space-y-8 animate-in fade-in duration-700">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">
+            Business Overview
+          </h1>
+          <p className="text-muted-foreground text-sm">
+            Real-time analytics from your store.
+          </p>
+        </div>
+        <Badge variant="secondary" className="px-3 py-1 gap-1">
+          <TrendingUp className="h-3 w-3 text-emerald-500" />
+          Live Updates
+        </Badge>
       </div>
 
-      {/* Charts Row 1 */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader><CardTitle className="text-base">Monthly Revenue</CardTitle></CardHeader>
+      {/* Summary Section */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          title="Total Revenue"
+          value={formatNPR(stats.totalRevenue)}
+          icon={DollarSign}
+          gradient="bg-gradient-to-br from-emerald-500 to-teal-600"
+        />
+        <StatCard
+          title="Total Orders"
+          value={orders.length.toString()}
+          icon={ShoppingCart}
+          gradient="bg-gradient-to-br from-amber-500 to-orange-600"
+        />
+        <StatCard
+          title="Total Products"
+          value={products.length.toString()}
+          icon={Package}
+          gradient="bg-gradient-to-br from-blue-500 to-indigo-600"
+        />
+        <StatCard
+          title="Active Users"
+          value={users.length.toString()}
+          icon={Users}
+          gradient="bg-gradient-to-br from-purple-500 to-pink-600"
+        />
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-7">
+        {/* Main Revenue Chart */}
+        <Card className="lg:col-span-4 border-none shadow-sm bg-muted/20">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold">
+              Revenue Trend
+            </CardTitle>
+          </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={monthlyRevenue}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="month" fontSize={12} />
-                <YAxis fontSize={12} tickFormatter={(v) => `रु${(v / 1000).toFixed(0)}k`} />
-                <Tooltip formatter={(v: number) => formatNPR(v)} />
-                <Bar dataKey="revenue" fill="hsl(172,66%,50%)" radius={[6, 6, 0, 0]} />
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={stats.revenueData}>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  vertical={false}
+                  stroke="#e2e8f0"
+                />
+                <XAxis dataKey="month" axisLine={false} tickLine={false} />
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(v) => `रु${v / 1000}k`}
+                />
+                <Tooltip
+                  cursor={{ fill: "rgba(0,0,0,0.05)" }}
+                  contentStyle={{
+                    borderRadius: "8px",
+                    border: "none",
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                  }}
+                  formatter={(v: any) => [formatNPR(v), "Revenue"]}
+                />
+                <Bar
+                  dataKey="revenue"
+                  fill="#10b981"
+                  radius={[4, 4, 0, 0]}
+                  barSize={40}
+                />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader><CardTitle className="text-base">Monthly Orders</CardTitle></CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={250}>
-              <LineChart data={monthlyOrders}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="month" fontSize={12} />
-                <YAxis fontSize={12} />
-                <Tooltip />
-                <Line type="monotone" dataKey="count" stroke="hsl(38,92%,50%)" strokeWidth={3} dot={{ fill: "hsl(38,92%,50%)", r: 5 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Charts Row 2 */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader><CardTitle className="text-base">Order Status</CardTitle></CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
-                <Pie data={statusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                  {statusData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader><CardTitle className="text-base">Payment Methods</CardTitle></CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
-                <Pie data={methodData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={90} label>
-                  {methodData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Low Stock & Recent Orders */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
+        {/* Status Distribution */}
+        <Card className="lg:col-span-3 border-none shadow-sm bg-muted/20">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <AlertTriangle className="h-4 w-4 text-warning" /> Low Stock Alerts
+            <CardTitle className="text-lg font-semibold">
+              Order Fulfillment
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {lowStock.length === 0 ? (
-              <p className="text-sm text-muted-foreground">All products are well stocked.</p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Product</TableHead>
-                    <TableHead className="text-right">Stock</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {lowStock.map((p: any) => (
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={stats.statusData}
+                  innerRadius={60}
+                  outerRadius={80}
+                  paddingAngle={5}
+                  dataKey="value"
+                >
+                  {stats.statusData.map((_, index) => (
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={CHART_COLORS[index % CHART_COLORS.length]}
+                    />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend
+                  iconType="circle"
+                  layout="vertical"
+                  align="right"
+                  verticalAlign="middle"
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Low Stock Section */}
+        <Card className="border-none shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" /> Inventory
+              Alerts
+            </CardTitle>
+            <Badge variant="destructive">Critically Low</Badge>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableBody>
+                {stats.lowStock.length > 0 ? (
+                  stats.lowStock.map((p) => (
                     <TableRow key={p.id}>
                       <TableCell className="font-medium">{p.name}</TableCell>
                       <TableCell className="text-right">
-                        <Badge variant="destructive">{p.stock}</Badge>
+                        <div className="flex items-center justify-end gap-2">
+                          <span className="text-sm text-muted-foreground">
+                            {p.stock} left
+                          </span>
+                          <div className="w-16 h-2 bg-gray-100 rounded-full overflow-hidden">
+                            <div
+                              className="bg-red-500 h-full"
+                              style={{
+                                width: `${Math.min(p.stock * 10, 100)}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
                       </TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader><CardTitle className="text-base">Recent Orders</CardTitle></CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Order</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recentOrders.map((o: any) => (
-                  <TableRow key={o.id}>
-                    <TableCell className="font-mono text-xs">{o.id?.slice(0, 8)}</TableCell>
-                    <TableCell>
-                      <span className={`status-${o.status?.toLowerCase()} rounded px-2 py-0.5 text-xs font-medium`}>
-                        {o.status}
-                      </span>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell className="text-center text-muted-foreground py-4">
+                      No inventory alerts.
                     </TableCell>
-                    <TableCell className="text-right">{formatNPR(o.total || 0)}</TableCell>
                   </TableRow>
-                ))}
-                {recentOrders.length === 0 && (
-                  <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground">No orders yet</TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
+          </CardContent>
+        </Card>
+
+        {/* Recent Activity */}
+        <Card className="border-none shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg">Recent Orders</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {stats.recentOrders.length > 0 ? (
+                stats.recentOrders.map((o) => (
+                  <div
+                    key={o.id}
+                    className="flex items-center justify-between border-b pb-3 last:border-0 last:pb-0"
+                  >
+                    <div className="flex flex-col">
+                      <span className="text-sm font-semibold">
+                        #{o.orderNumber || o.id.slice(0, 8)}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(o.createdAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      <span className="text-sm font-bold">
+                        {formatNPR(o.total)}
+                      </span>
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] uppercase"
+                      >
+                        {o.status}
+                      </Badge>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No recent orders.
+                </p>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>

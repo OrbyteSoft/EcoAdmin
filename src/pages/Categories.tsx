@@ -53,6 +53,7 @@ import {
   Upload,
   Loader2,
   X,
+  ChevronLeft,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";

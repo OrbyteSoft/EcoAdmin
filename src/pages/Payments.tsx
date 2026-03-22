@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   usePayments,
   PaymentStatus,
@@ -28,6 +29,13 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
   CreditCard,
   Smartphone,
   Globe,
@@ -36,6 +44,11 @@ import {
   Search,
   User,
   Hash,
+  Eye,
+  ArrowRight,
+  AlertCircle,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 const methodIcons: Record<string, any> = {
@@ -47,12 +60,16 @@ const methodIcons: Record<string, any> = {
 
 const STATUSES: PaymentStatus[] = ["PENDING", "SUCCESS", "FAILED", "REFUNDED"];
 const METHODS: PaymentMethod[] = ["ESEWA", "KHALTI", "STRIPE", "COD"];
+const ITEMS_PER_PAGE = 10;
 
 export default function Payments() {
   const { payments, isLoading, updatePaymentStatus } = usePayments();
+  const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [methodFilter, setMethodFilter] = useState<string>("all");
+  const [selectedPayment, setSelectedPayment] = useState<any>(null);
   const [search, setSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
 
   const filtered = payments.filter((p) => {
     const matchesStatus = statusFilter === "all" || p.status === statusFilter;
@@ -68,6 +85,17 @@ export default function Payments() {
 
     return matchesStatus && matchesMethod && matchesSearch;
   });
+
+  // Pagination Logic
+  const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const paginatedData = filtered.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
+  // Reset to page 1 when filters change
+  const handleFilterChange = (callback: () => void) => {
+    setCurrentPage(1);
+    callback();
+  };
 
   const handleVerify = async (id: string) => {
     await updatePaymentStatus(id, `MANUAL_ADMIN_${Date.now()}`, "SUCCESS");
@@ -163,7 +191,7 @@ export default function Payments() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((p) => {
+              {paginatedData.map((p) => {
                 const MethodIcon = methodIcons[p.method] || CreditCard;
                 return (
                   <TableRow
@@ -227,17 +255,27 @@ export default function Payments() {
                       {formatNPR(p.amount)}
                     </TableCell>
                     <TableCell className="text-right">
-                      {p.status === "PENDING" && (
+                      <div className="flex items-center gap-1 justify-end">
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
-                          onClick={() => handleVerify(p.id)}
+                          className="h-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                          onClick={() => setSelectedPayment(p)}
                         >
-                          <CheckCircle className="mr-1.5 h-4 w-4" />
-                          Verify
+                          <Eye className="h-4 w-4" />
                         </Button>
-                      )}
+                        {p.status === "PENDING" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                            onClick={() => handleVerify(p.id)}
+                          >
+                            <CheckCircle className="mr-1.5 h-4 w-4" />
+                            Verify
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -262,6 +300,214 @@ export default function Payments() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Pagination Controls */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4">
+        <div className="text-sm text-muted-foreground">
+          Showing{" "}
+          <span className="font-semibold">
+            {filtered.length === 0 ? 0 : startIndex + 1}-
+            {Math.min(startIndex + ITEMS_PER_PAGE, filtered.length)}
+          </span>{" "}
+          of <span className="font-semibold">{filtered.length}</span> payments
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            className="h-8 w-8 p-0"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+
+          <div className="flex items-center gap-1">
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .slice(
+                Math.max(0, currentPage - 2),
+                Math.min(totalPages, currentPage + 1),
+              )
+              .map((page) => (
+                <Button
+                  key={page}
+                  variant={currentPage === page ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setCurrentPage(page)}
+                  className="h-8 min-w-8"
+                >
+                  {page}
+                </Button>
+              ))}
+          </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages || totalPages === 0}
+            className="h-8 w-8 p-0"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Payment Details Dialog */}
+      <Dialog
+        open={!!selectedPayment}
+        onOpenChange={() => setSelectedPayment(null)}
+      >
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-xl">Payment Details</DialogTitle>
+            <DialogDescription>
+              Payment ID: {selectedPayment?.id.slice(0, 8)}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedPayment && (
+            <div className="space-y-6">
+              {/* Payment Amount Section */}
+              <div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                  Payment Amount
+                </p>
+                <p className="text-3xl font-bold text-primary">
+                  {formatNPR(selectedPayment.amount)}
+                </p>
+              </div>
+
+              {/* Status and Method */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                    Status
+                  </p>
+                  <Badge
+                    variant="outline"
+                    className={`
+                      text-sm font-bold w-fit
+                      ${selectedPayment.status === "SUCCESS" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : ""}
+                      ${selectedPayment.status === "PENDING" ? "bg-amber-50 text-amber-700 border-amber-200" : ""}
+                      ${selectedPayment.status === "FAILED" ? "bg-rose-50 text-rose-700 border-rose-200" : ""}
+                      ${selectedPayment.status === "REFUNDED" ? "bg-blue-50 text-blue-700 border-blue-200" : ""}
+                    `}
+                  >
+                    {selectedPayment.status}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                    Payment Method
+                  </p>
+                  <div className="flex items-center gap-2">
+                    {(() => {
+                      const Icon =
+                        methodIcons[selectedPayment.method] || CreditCard;
+                      return <Icon className="h-5 w-5 text-muted-foreground" />;
+                    })()}
+                    <span className="font-medium capitalize">
+                      {selectedPayment.method.toLowerCase()}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Payment Reference */}
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                  Payment Reference
+                </p>
+                <p className="font-mono text-sm bg-muted p-2 rounded break-all">
+                  {selectedPayment.referenceId || "N/A"}
+                </p>
+              </div>
+
+              {/* Customer Information */}
+              <div className="p-4 rounded-lg bg-gradient-to-r from-slate-50 to-slate-100 border border-slate-200">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                  Customer Information
+                </p>
+                <div className="space-y-2">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Name</p>
+                    <p className="font-medium">
+                      {selectedPayment.user?.name || "Guest"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Email</p>
+                    <p className="font-medium">{selectedPayment.user?.email}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Phone</p>
+                    <p className="font-medium">
+                      {selectedPayment.user?.phone || "N/A"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Order Details with Cross-Navigation */}
+              {selectedPayment.order && (
+                <div className="p-4 rounded-lg bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Associated Order
+                    </p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-blue-600 hover:text-blue-700 hover:bg-blue-200"
+                      onClick={() => {
+                        navigate("/orders", {
+                          state: {
+                            focusOrder: selectedPayment.order.orderNumber,
+                          },
+                        });
+                        setSelectedPayment(null);
+                      }}
+                    >
+                      <ArrowRight className="h-4 w-4 mr-1.5" />
+                      View Order
+                    </Button>
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-primary">
+                      #{selectedPayment.order.orderNumber}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Click "View Order" to see complete order details and notes
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Dates */}
+              <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                    Payment Date
+                  </p>
+                  <p className="font-medium">
+                    {formatDateTime(selectedPayment.createdAt)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                    Updated
+                  </p>
+                  <p className="font-medium">
+                    {formatDateTime(selectedPayment.updatedAt)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

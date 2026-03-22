@@ -26,6 +26,7 @@ export interface Product {
   isFlashDeal: boolean;
   flashDealEnd: string | null;
   categoryId: string | null;
+  brandId: string | null;
   images: string[];
   createdAt: string;
   updatedAt: string;
@@ -79,6 +80,7 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({
       isFlashDeal: item.isFlashDeal ?? item.is_flash_deal ?? false,
       flashDealEnd: item.flashDealEnd || item.flash_deal_end || null,
       categoryId: item.categoryId || item.category_id || null,
+      brandId: item.brandId || item.brand_id || null,
       images: normalizedImages,
       createdAt: item.createdAt || item.created_at,
       updatedAt: item.updatedAt || item.updated_at,

@@ -17,6 +17,7 @@ import { UserProvider } from "@/contexts/UserContext";
 import { CategoryProvider } from "@/contexts/CategoryContext";
 import { ProductProvider } from "@/contexts/ProductContext";
 import { PaymentProvider } from "@/contexts/PaymentContext";
+import { BrandProvider } from "@/contexts/BrandContext";
 
 import { AdminLayout } from "@/components/layout/AdminLayout";
 
@@ -24,6 +25,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Products from "./pages/Products";
 import Categories from "./pages/Categories";
+import Brands from "./pages/Brands";
 import Orders from "./pages/Orders";
 import UsersPage from "./pages/Users";
 import Payments from "./pages/Payments";
@@ -82,34 +84,46 @@ const App = () => {
             <UserProvider>
               <CategoryProvider>
                 <ProductProvider>
-                  <OrderProvider>
-                    <PaymentProvider>
-                      <BrowserRouter>
-                        <Routes>
-                          <Route path="/login" element={<Login />} />
+                  <BrandProvider>
+                    <OrderProvider>
+                      <PaymentProvider>
+                        <BrowserRouter>
+                          <Routes>
+                            <Route path="/login" element={<Login />} />
 
-                          <Route element={<ProtectedRoute />}>
-                            <Route element={<AdminLayout />}>
-                              <Route path="/" element={<Dashboard />} />
-                              <Route path="/products" element={<Products />} />
-                              <Route
-                                path="/categories"
-                                element={<Categories />}
-                              />
-                              <Route path="/orders" element={<Orders />} />
-                              <Route path="/users" element={<UsersPage />} />
-                              <Route path="/payments" element={<Payments />} />
-                              <Route path="/coupons" element={<Coupons />} />
-                              <Route path="/reviews" element={<Reviews />} />
-                              <Route path="/settings" element={<Settings />} />
+                            <Route element={<ProtectedRoute />}>
+                              <Route element={<AdminLayout />}>
+                                <Route path="/" element={<Dashboard />} />
+                                <Route
+                                  path="/products"
+                                  element={<Products />}
+                                />
+                                <Route
+                                  path="/categories"
+                                  element={<Categories />}
+                                />
+                                <Route path="/brands" element={<Brands />} />
+                                <Route path="/orders" element={<Orders />} />
+                                <Route path="/users" element={<UsersPage />} />
+                                <Route
+                                  path="/payments"
+                                  element={<Payments />}
+                                />
+                                <Route path="/coupons" element={<Coupons />} />
+                                <Route path="/reviews" element={<Reviews />} />
+                                <Route
+                                  path="/settings"
+                                  element={<Settings />}
+                                />
+                              </Route>
                             </Route>
-                          </Route>
 
-                          <Route path="*" element={<NotFound />} />
-                        </Routes>
-                      </BrowserRouter>
-                    </PaymentProvider>
-                  </OrderProvider>
+                            <Route path="*" element={<NotFound />} />
+                          </Routes>
+                        </BrowserRouter>
+                      </PaymentProvider>
+                    </OrderProvider>
+                  </BrandProvider>
                 </ProductProvider>
               </CategoryProvider>
             </UserProvider>

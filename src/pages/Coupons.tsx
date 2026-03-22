@@ -34,10 +34,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { toast } from "sonner";
 
 const emptyForm = { code: "", discount: 0, active: true, expiresAt: "" };
+const ITEMS_PER_PAGE = 10;
 
 export default function Coupons() {
   const qc = useQueryClient();

@@ -8,6 +8,7 @@ import {
   Ticket,
   Star,
   Settings,
+  Lightbulb,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -31,15 +32,20 @@ const mainItems = [
 
 const secondaryItems = [
   { title: "Payments", url: "/payments", icon: CreditCard },
+  { title: "Brands", url: "/brands", icon: Lightbulb },
   { title: "Coupons", url: "/coupons", icon: Ticket },
   { title: "Reviews", url: "/reviews", icon: Star },
 ];
 
-const settingsItems = [
-  { title: "Settings", url: "/settings", icon: Settings },
-];
+const settingsItems = [{ title: "Settings", url: "/settings", icon: Settings }];
 
-function NavGroup({ label, items }: { label: string; items: typeof mainItems }) {
+function NavGroup({
+  label,
+  items,
+}: {
+  label: string;
+  items: typeof mainItems;
+}) {
   return (
     <SidebarGroup>
       <SidebarGroupLabel>{label}</SidebarGroupLabel>

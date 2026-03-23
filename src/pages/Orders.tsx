@@ -40,16 +40,13 @@ import { Order } from "@/types";
 const STATUSES = ["PENDING", "PAID", "SHIPPED", "DELIVERED", "CANCELLED"];
 const ITEMS_PER_PAGE = 10;
 
-// Status flow based on payment method
 const getStatusFlow = (paymentMethod: string) => {
   if (paymentMethod === "COD") {
     return ["PENDING", "SHIPPED", "PAID", "DELIVERED"];
   }
-  // KHALTI, ESEWA, STRIPE
   return ["PENDING", "PAID", "SHIPPED", "DELIVERED"];
 };
 
-// Get allowed next statuses based on current status and payment method
 const getAllowedNextStatuses = (
   currentStatus: string,
   paymentMethod: string,
@@ -59,7 +56,6 @@ const getAllowedNextStatuses = (
 
   if (currentIndex === -1) return ["CANCELLED"];
 
-  // Can go to next status in flow or CANCELLED anytime
   const allowed = [];
   if (currentIndex < flow.length - 1) {
     allowed.push(flow[currentIndex + 1]);
@@ -84,7 +80,6 @@ export default function Orders() {
     fetchAllOrders();
   }, [fetchAllOrders]);
 
-  // Auto-select order when navigated from Payments page
   useEffect(() => {
     if (location.state?.focusOrder && orders.length > 0) {
       const order = orders.find(
@@ -102,7 +97,6 @@ export default function Orders() {
       ? orders
       : orders.filter((o) => o.status === statusFilter);
 
-  // Apply search filter
   const searchFiltered = filtered.filter((o) => {
     const searchTerm = search.toLowerCase();
     return (
@@ -113,7 +107,6 @@ export default function Orders() {
     );
   });
 
-  // Pagination Logic
   const totalPages = Math.ceil(searchFiltered.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const paginatedData = searchFiltered.slice(
@@ -121,7 +114,6 @@ export default function Orders() {
     startIndex + ITEMS_PER_PAGE,
   );
 
-  // Reset pagination when filter changes
   useEffect(() => {
     setCurrentPage(1);
   }, [statusFilter, search]);
@@ -282,7 +274,6 @@ export default function Orders() {
         </CardContent>
       </Card>
 
-      {/* Pagination Controls */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4">
         <div className="text-sm text-muted-foreground">
           Showing{" "}
@@ -378,7 +369,6 @@ export default function Orders() {
                 </div>
               </div>
 
-              {/* Status Change Card */}
               <div className="p-4 rounded-lg bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200">
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-muted-foreground font-bold uppercase text-[10px]">
@@ -392,7 +382,6 @@ export default function Orders() {
                 </div>
                 <div className="space-y-3">
                   <div className="grid grid-cols-3 gap-3 items-center">
-                    {/* Previous Status */}
                     <div className="flex flex-col">
                       <span className="text-xs text-muted-foreground font-semibold mb-1">
                         Previous Status
@@ -402,12 +391,10 @@ export default function Orders() {
                       </div>
                     </div>
 
-                    {/* Arrow */}
                     <div className="flex justify-center">
                       <div className="text-blue-500 font-bold text-lg">→</div>
                     </div>
 
-                    {/* Current Status */}
                     <div className="flex flex-col">
                       <span className="text-xs text-muted-foreground font-semibold mb-1">
                         Current Status
@@ -418,7 +405,6 @@ export default function Orders() {
                     </div>
                   </div>
 
-                  {/* Status Change Dropdown */}
                   <div className="space-y-2">
                     <label className="text-xs text-muted-foreground font-semibold">
                       Change To
@@ -522,10 +508,6 @@ export default function Orders() {
                 <div className="flex justify-between w-48 text-sm">
                   <span className="text-muted-foreground">Subtotal:</span>
                   <span>{formatNPR(selectedOrder.subtotal)}</span>
-                </div>
-                <div className="flex justify-between w-48 text-sm">
-                  <span className="text-muted-foreground">Tax (13%):</span>
-                  <span>{formatNPR(selectedOrder.tax)}</span>
                 </div>
                 <div className="flex justify-between w-48 text-sm border-b pb-1">
                   <span className="text-muted-foreground">Shipping:</span>

@@ -18,6 +18,7 @@ import { CategoryProvider } from "@/contexts/CategoryContext";
 import { ProductProvider } from "@/contexts/ProductContext";
 import { PaymentProvider } from "@/contexts/PaymentContext";
 import { BrandProvider } from "@/contexts/BrandContext";
+import { NotificationProvider } from "@/contexts/NotificationContext";
 
 import { AdminLayout } from "@/components/layout/AdminLayout";
 
@@ -32,6 +33,7 @@ import Payments from "./pages/Payments";
 import Coupons from "./pages/Coupons";
 import Reviews from "./pages/Reviews";
 import Settings from "./pages/Settings";
+import Notifications from "./pages/Notifications";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient({
@@ -81,52 +83,67 @@ const App = () => {
           <Sonner />
 
           <AuthProvider>
-            <UserProvider>
-              <CategoryProvider>
-                <ProductProvider>
-                  <BrandProvider>
-                    <OrderProvider>
-                      <PaymentProvider>
-                        <BrowserRouter>
-                          <Routes>
-                            <Route path="/login" element={<Login />} />
+            <NotificationProvider>
+              <UserProvider>
+                <CategoryProvider>
+                  <ProductProvider>
+                    <BrandProvider>
+                      <OrderProvider>
+                        <PaymentProvider>
+                          <BrowserRouter>
+                            <Routes>
+                              <Route path="/login" element={<Login />} />
 
-                            <Route element={<ProtectedRoute />}>
-                              <Route element={<AdminLayout />}>
-                                <Route path="/" element={<Dashboard />} />
-                                <Route
-                                  path="/products"
-                                  element={<Products />}
-                                />
-                                <Route
-                                  path="/categories"
-                                  element={<Categories />}
-                                />
-                                <Route path="/brands" element={<Brands />} />
-                                <Route path="/orders" element={<Orders />} />
-                                <Route path="/users" element={<UsersPage />} />
-                                <Route
-                                  path="/payments"
-                                  element={<Payments />}
-                                />
-                                <Route path="/coupons" element={<Coupons />} />
-                                <Route path="/reviews" element={<Reviews />} />
-                                <Route
-                                  path="/settings"
-                                  element={<Settings />}
-                                />
+                              <Route element={<ProtectedRoute />}>
+                                <Route element={<AdminLayout />}>
+                                  <Route path="/" element={<Dashboard />} />
+                                  <Route
+                                    path="/products"
+                                    element={<Products />}
+                                  />
+                                  <Route
+                                    path="/categories"
+                                    element={<Categories />}
+                                  />
+                                  <Route path="/brands" element={<Brands />} />
+                                  <Route path="/orders" element={<Orders />} />
+                                  <Route
+                                    path="/users"
+                                    element={<UsersPage />}
+                                  />
+                                  <Route
+                                    path="/payments"
+                                    element={<Payments />}
+                                  />
+                                  <Route
+                                    path="/coupons"
+                                    element={<Coupons />}
+                                  />
+                                  <Route
+                                    path="/reviews"
+                                    element={<Reviews />}
+                                  />
+                                  <Route
+                                    path="/notifications"
+                                    element={<Notifications />}
+                                  />
+                                  <Route
+                                    path="/settings"
+                                    element={<Settings />}
+                                  />
+                                </Route>
                               </Route>
-                            </Route>
 
-                            <Route path="*" element={<NotFound />} />
-                          </Routes>
-                        </BrowserRouter>
-                      </PaymentProvider>
-                    </OrderProvider>
-                  </BrandProvider>
-                </ProductProvider>
-              </CategoryProvider>
-            </UserProvider>
+                              <Route path="*" element={<NotFound />} />
+                            </Routes>
+                          </BrowserRouter>
+                        </PaymentProvider>
+                      </OrderProvider>
+                    </BrandProvider>
+                  </ProductProvider>
+                </CategoryProvider>
+              </UserProvider>
+            </NotificationProvider>
           </AuthProvider>
         </TooltipProvider>
       </QueryClientProvider>

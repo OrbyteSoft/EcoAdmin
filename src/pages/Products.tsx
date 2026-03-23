@@ -73,6 +73,8 @@ import {
   Eye,
   Sparkles,
   Lightbulb,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -97,7 +99,7 @@ const emptyProduct = {
 };
 
 export default function ProductsPage() {
-  const { products, loading, createProduct, updateProduct, deleteProduct } =
+  const { products, loading, createProduct, updateProduct, deleteProduct, page, setPage, total } =
     useProducts();
   const { brands } = useBrand();
 
@@ -489,6 +491,44 @@ export default function ProductsPage() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* PAGINATION */}
+      {total > 0 && (
+        <div className="flex items-center justify-between mt-4 px-2">
+          <div className="text-sm text-muted-foreground">
+            Showing <span className="font-medium">{(page - 1) * 10 + 1}</span> to{" "}
+            <span className="font-medium">{Math.min(page * 10, total)}</span> of{" "}
+            <span className="font-medium">{total}</span> products
+          </div>
+
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage(Math.max(1, page - 1))}
+              disabled={page <= 1}
+            >
+              <ChevronLeft className="mr-2 h-4 w-4" /> Previous
+            </Button>
+
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-muted-foreground">
+                Page <span className="font-medium">{page}</span> of{" "}
+                <span className="font-medium">{Math.ceil(total / 10)}</span>
+              </span>
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage(page + 1)}
+              disabled={page >= Math.ceil(total / 10)}
+            >
+              Next <ChevronRight className="ml-2 h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-4xl h-[95vh] p-0 flex flex-col overflow-hidden shadow-2xl border-border bg-card">

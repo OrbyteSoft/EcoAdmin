@@ -1,4 +1,6 @@
-import { useState } from "react";
+"use client";
+
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { formatNPR, formatDate } from "@/lib/format";
@@ -42,15 +44,37 @@ const ITEMS_PER_PAGE = 10;
 
 export default function Coupons() {
   const qc = useQueryClient();
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [search, setSearch] = useState("");
 
   const { data, isLoading } = useQuery({
     queryKey: ["coupons"],
     queryFn: () => api<any>("/coupons"),
   });
+
   const coupons = (Array.isArray(data) ? data : data?.data || []) as any[];
+
+  // ✅ Search filter
+  const filteredCoupons = coupons.filter((c) =>
+    c.code.toLowerCase().includes(search.toLowerCase()),
+  );
+
+  // ✅ Pagination logic
+  const totalPages = Math.ceil(filteredCoupons.length / ITEMS_PER_PAGE);
+  const startIdx = (currentPage - 1) * ITEMS_PER_PAGE;
+  const paginatedCoupons = filteredCoupons.slice(
+    startIdx,
+    startIdx + ITEMS_PER_PAGE,
+  );
+
+  // ✅ Reset page when search/data changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, coupons.length]);
 
   const createMutation = useMutation({
     mutationFn: (body: any) =>
@@ -58,6 +82,7 @@ export default function Coupons() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["coupons"] });
       setDialogOpen(false);
+      setForm(emptyForm);
       toast.success("Coupon created");
     },
     onError: (e: Error) => toast.error(e.message),
@@ -85,8 +110,10 @@ export default function Coupons() {
 
   return (
     <div className="space-y-4 animate-fade-in">
+      {/* HEADER */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-2xl font-bold">Coupons</h1>
+
         <Button
           onClick={() => {
             setForm(emptyForm);
@@ -98,6 +125,18 @@ export default function Coupons() {
         </Button>
       </div>
 
+      {/* SEARCH */}
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="Search coupons..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
+      {/* TABLE */}
       <Card>
         <CardContent className="p-0">
           <Table>
@@ -110,37 +149,9 @@ export default function Coupons() {
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
+
             <TableBody>
-              {coupons.map((c: any) => (
-                <TableRow key={c.id}>
-                  <TableCell className="font-mono font-bold">
-                    {c.code}
-                  </TableCell>
-                  <TableCell className="text-right font-semibold">
-                    {c.discount < 5
-                      ? `${c.discount}% OFF`
-                      : `${formatNPR(c.discount)} OFF`}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={c.active ? "default" : "outline"}>
-                      {c.active ? "Active" : "Inactive"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {c.expiresAt ? formatDate(c.expiresAt) : "—"}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setDeleteId(c.id)}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {coupons.length === 0 && (
+              {filteredCoupons.length === 0 ? (
                 <TableRow>
                   <TableCell
                     colSpan={5}
@@ -149,17 +160,110 @@ export default function Coupons() {
                     No coupons found
                   </TableCell>
                 </TableRow>
+              ) : (
+                paginatedCoupons.map((c: any) => (
+                  <TableRow key={c.id}>
+                    <TableCell className="font-mono font-bold">
+                      {c.code}
+                    </TableCell>
+
+                    <TableCell className="text-right font-semibold">
+                      {c.discount < 5
+                        ? `${c.discount}% OFF`
+                        : `${formatNPR(c.discount)} OFF`}
+                    </TableCell>
+
+                    <TableCell>
+                      <Badge variant={c.active ? "default" : "outline"}>
+                        {c.active ? "Active" : "Inactive"}
+                      </Badge>
+                    </TableCell>
+
+                    <TableCell className="text-sm text-muted-foreground">
+                      {c.expiresAt ? formatDate(c.expiresAt) : "—"}
+                    </TableCell>
+
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setDeleteId(c.id)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
               )}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
 
+      {/* PAGINATION */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4">
+        <div className="text-sm text-muted-foreground">
+          Showing{" "}
+          <span className="font-semibold">
+            {filteredCoupons.length === 0 ? 0 : startIdx + 1}-
+            {Math.min(startIdx + ITEMS_PER_PAGE, filteredCoupons.length)}
+          </span>{" "}
+          of <span className="font-semibold">{filteredCoupons.length}</span>{" "}
+          coupons
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Prev */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            className="h-8 w-8 p-0"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+
+          {/* Page Numbers */}
+          <div className="flex items-center gap-1">
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .slice(
+                Math.max(0, currentPage - 2),
+                Math.min(totalPages, currentPage + 1),
+              )
+              .map((page) => (
+                <Button
+                  key={page}
+                  variant={currentPage === page ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setCurrentPage(page)}
+                  className="h-8 min-w-8"
+                >
+                  {page}
+                </Button>
+              ))}
+          </div>
+
+          {/* Next */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages || totalPages === 0}
+            className="h-8 w-8 p-0"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* CREATE DIALOG */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>New Coupon</DialogTitle>
           </DialogHeader>
+
           <div className="grid gap-4 py-2">
             <div className="grid gap-2">
               <Label>Code</Label>
@@ -171,6 +275,7 @@ export default function Coupons() {
                 placeholder="SAVE20"
               />
             </div>
+
             <div className="grid gap-2">
               <Label>Discount (NPR)</Label>
               <Input
@@ -181,6 +286,7 @@ export default function Coupons() {
                 }
               />
             </div>
+
             <div className="grid gap-2">
               <Label>Expires At</Label>
               <Input
@@ -191,6 +297,7 @@ export default function Coupons() {
                 }
               />
             </div>
+
             <div className="flex items-center gap-2">
               <Switch
                 checked={form.active}
@@ -199,10 +306,12 @@ export default function Coupons() {
               <Label>Active</Label>
             </div>
           </div>
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
               Cancel
             </Button>
+
             <Button
               onClick={() =>
                 createMutation.mutate({
@@ -218,6 +327,7 @@ export default function Coupons() {
         </DialogContent>
       </Dialog>
 
+      {/* DELETE DIALOG */}
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -226,8 +336,10 @@ export default function Coupons() {
               This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
+
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
+
             <AlertDialogAction
               onClick={() => deleteId && deleteMutation.mutate(deleteId)}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"

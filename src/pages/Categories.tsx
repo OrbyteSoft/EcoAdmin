@@ -153,6 +153,7 @@ export default function Categories() {
     categories,
     categoryTree,
     isLoading,
+    meta,
     fetchCategories,
     fetchCategoryTree,
     createCategory,
@@ -161,6 +162,7 @@ export default function Categories() {
   } = useCategories();
 
   const [search, setSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Category | null>(null);
@@ -171,9 +173,9 @@ export default function Categories() {
   const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
-    fetchCategories();
+    fetchCategories({ page: currentPage, limit: 10, search });
     fetchCategoryTree();
-  }, [fetchCategories, fetchCategoryTree]);
+  }, [currentPage, search, fetchCategories, fetchCategoryTree]);
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -292,7 +294,7 @@ export default function Categories() {
           value={search}
           onChange={(e) => {
             setSearch(e.target.value);
-            fetchCategories({ search: e.target.value });
+            setCurrentPage(1);
           }}
           className="flex h-10 w-full rounded-md border border-input bg-background px-9 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
         />
@@ -364,6 +366,60 @@ export default function Categories() {
               </Table>
             </CardContent>
           </Card>
+
+          {/* PAGINATION */}
+          <div className="flex items-center justify-between mt-4 px-2">
+            <div className="text-sm text-muted-foreground">
+              {meta ? (
+                <>
+                  Showing{" "}
+                  <span className="font-medium">
+                    {(meta.page - 1) * meta.limit + 1}
+                  </span>{" "}
+                  to{" "}
+                  <span className="font-medium">
+                    {Math.min(meta.page * meta.limit, meta.total)}
+                  </span>{" "}
+                  of <span className="font-medium">{meta.total}</span> categories
+                </>
+              ) : (
+                <span className="font-medium">{categories.length}</span>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={!meta || currentPage <= 1}
+              >
+                <ChevronLeft className="mr-2 h-4 w-4" /> Previous
+              </Button>
+
+              {meta && (
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-muted-foreground">
+                    Page <span className="font-medium">{meta.page}</span> of{" "}
+                    <span className="font-medium">{meta.totalPages}</span>
+                  </span>
+                </div>
+              )}
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => p + 1)}
+                disabled={
+                  !meta ||
+                  currentPage >= meta.totalPages ||
+                  categories.length < meta.limit
+                }
+              >
+                Next <ChevronRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+          </div>
         </TabsContent>
 
         <TabsContent value="tree">

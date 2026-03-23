@@ -6,9 +6,11 @@ import React, {
   useState,
   useEffect,
   useCallback,
+  useRef,
 } from "react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { useNotifications } from "./NotificationContext";
 
 export type PaymentStatus = "PENDING" | "SUCCESS" | "FAILED" | "REFUNDED";
 export type PaymentMethod = "ESEWA" | "KHALTI" | "STRIPE" | "COD";
@@ -50,18 +52,38 @@ export const PaymentProvider: React.FC<{ children: React.ReactNode }> = ({
 }) => {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const previousPaymentsRef = useRef<Payment[]>([]);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const { addNotification } = useNotifications();
 
   const fetchAllPayments = useCallback(async () => {
     setIsLoading(true);
     try {
       const data = await api<Payment[]>("/payments/admin/all");
+
+      // Check for new payments
+      const previousIds = new Set(previousPaymentsRef.current.map(p => p.id));
+      const newPayments = data.filter(p => !previousIds.has(p.id));
+
+      // Add notifications for new payments
+      newPayments.forEach(payment => {
+        addNotification({
+          type: "payment",
+          title: `Payment - ${payment.method}`,
+          message: `New payment received - ${payment.status} (₹${payment.amount})`,
+          relatedId: payment.id,
+          read: false,
+        });
+      });
+
       setPayments(data);
+      previousPaymentsRef.current = data;
     } catch (error: any) {
       toast.error(error.message || "Failed to fetch admin payments");
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [addNotification]);
 
   const updatePaymentStatus = async (
     id: string,
@@ -85,8 +107,19 @@ export const PaymentProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+  // Set up polling for new payments every 5 seconds
   useEffect(() => {
     fetchAllPayments();
+
+    pollingIntervalRef.current = setInterval(() => {
+      fetchAllPayments();
+    }, 5000); // Poll every 5 seconds
+
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
   }, [fetchAllPayments]);
 
   return (

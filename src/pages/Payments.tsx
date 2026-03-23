@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   usePayments,
@@ -46,7 +46,6 @@ import {
   Hash,
   Eye,
   ArrowRight,
-  AlertCircle,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -71,37 +70,40 @@ export default function Payments() {
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
 
-  const filtered = payments.filter((p) => {
-    const matchesStatus = statusFilter === "all" || p.status === statusFilter;
-    const matchesMethod = methodFilter === "all" || p.method === methodFilter;
+  const filtered = useMemo(() => {
+    return payments.filter((p) => {
+      const matchesStatus = statusFilter === "all" || p.status === statusFilter;
+      const matchesMethod = methodFilter === "all" || p.method === methodFilter;
 
-    // Comprehensive Search Logic
-    const searchTerm = search.toLowerCase();
-    const matchesSearch =
-      p.id.toLowerCase().includes(searchTerm) || // Search by Payment UUID
-      p.order?.orderNumber.toLowerCase().includes(searchTerm) || // Search by Order Number
-      p.user?.email.toLowerCase().includes(searchTerm) || // Search by Email
-      p.user?.name?.toLowerCase().includes(searchTerm); // Search by Name
+      const searchTerm = search.toLowerCase().trim();
+      const matchesSearch =
+        searchTerm === "" ||
+        p.id.toLowerCase().includes(searchTerm) ||
+        (p.order?.orderNumber &&
+          p.order.orderNumber.toLowerCase().includes(searchTerm)) ||
+        (p.user?.email && p.user.email.toLowerCase().includes(searchTerm)) ||
+        (p.user?.name && p.user.name.toLowerCase().includes(searchTerm)) ||
+        (p.reference && p.reference.toLowerCase().includes(searchTerm)); // Searchable references!
 
-    return matchesStatus && matchesMethod && matchesSearch;
-  });
+      return matchesStatus && matchesMethod && matchesSearch;
+    });
+  }, [payments, statusFilter, methodFilter, search]);
 
-  // Pagination Logic
   const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-  const paginatedData = filtered.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  const paginatedData = useMemo(() => {
+    return filtered.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [filtered, startIndex]);
 
-  // Reset to page 1 when filters change
-  const handleFilterChange = (callback: () => void) => {
+  useEffect(() => {
     setCurrentPage(1);
-    callback();
-  };
+  }, [statusFilter, methodFilter, search]);
 
   const handleVerify = async (id: string) => {
     await updatePaymentStatus(id, `MANUAL_ADMIN_${Date.now()}`, "SUCCESS");
   };
 
-  if (isLoading) {
+  if (isLoading && payments.length === 0) {
     return (
       <div className="space-y-4 p-6">
         <h1 className="text-2xl font-bold text-gray-800">Payments</h1>
@@ -139,7 +141,7 @@ export default function Payments() {
           <div className="relative w-full md:w-80">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search by ID, Order #, Name or Email..."
+              placeholder="Search by ID, Order #, Name, Email or Ref..."
               className="pl-9 h-10"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -264,7 +266,7 @@ export default function Payments() {
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
-                        {p.status === "PENDING" && (
+                        {p.status === "PENDING" && p.method !== "COD" && (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -287,7 +289,8 @@ export default function Payments() {
                     <div className="flex flex-col items-center justify-center text-muted-foreground">
                       <Search className="h-10 w-10 mb-2 opacity-20" />
                       <p className="font-medium">
-                        No results found for "{search}"
+                        No results found
+                        {search ? ` for "${search}"` : ""}
                       </p>
                       <p className="text-xs">
                         Try checking for typos or changing filters
@@ -301,7 +304,6 @@ export default function Payments() {
         </CardContent>
       </Card>
 
-      {/* Pagination Controls */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4">
         <div className="text-sm text-muted-foreground">
           Showing{" "}
@@ -354,7 +356,6 @@ export default function Payments() {
         </div>
       </div>
 
-      {/* Payment Details Dialog */}
       <Dialog
         open={!!selectedPayment}
         onOpenChange={() => setSelectedPayment(null)}
@@ -369,7 +370,6 @@ export default function Payments() {
 
           {selectedPayment && (
             <div className="space-y-6">
-              {/* Payment Amount Section */}
               <div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
                   Payment Amount
@@ -379,7 +379,6 @@ export default function Payments() {
                 </p>
               </div>
 
-              {/* Status and Method */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
@@ -415,17 +414,16 @@ export default function Payments() {
                 </div>
               </div>
 
-              {/* Payment Reference */}
+              {/* --- 🔥 Updated Transaction ID Reference Display --- */}
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                  Payment Reference
+                  Payment Transaction ID Reference
                 </p>
-                <p className="font-mono text-sm bg-muted p-2 rounded break-all">
-                  {selectedPayment.referenceId || "N/A"}
+                <p className="font-mono text-sm bg-muted p-3 rounded font-bold break-all tracking-wider text-primary">
+                  {selectedPayment.reference || "N/A"}
                 </p>
               </div>
 
-              {/* Customer Information */}
               <div className="p-4 rounded-lg bg-gradient-to-r from-slate-50 to-slate-100 border border-slate-200">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
                   Customer Information
@@ -450,7 +448,6 @@ export default function Payments() {
                 </div>
               </div>
 
-              {/* Order Details with Cross-Navigation */}
               {selectedPayment.order && (
                 <div className="p-4 rounded-lg bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200">
                   <div className="flex items-center justify-between mb-3">
@@ -485,7 +482,6 @@ export default function Payments() {
                 </div>
               )}
 
-              {/* Dates */}
               <div className="grid grid-cols-2 gap-4 pt-4 border-t">
                 <div>
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">

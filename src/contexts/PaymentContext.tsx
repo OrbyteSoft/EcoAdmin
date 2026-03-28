@@ -1,15 +1,19 @@
-"use client";
-
+/**
+ * PaymentContext
+ *
+ * Polls /payments/admin/all every 15 s.
+ * Fires addNotification only for brand-new payment IDs.
+ */
 import React, {
   createContext,
   useContext,
   useState,
-  useEffect,
   useCallback,
+  useEffect,
   useRef,
 } from "react";
-import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { toast } from "sonner";
 import { useNotifications } from "./NotificationContext";
 
 export type PaymentStatus = "PENDING" | "SUCCESS" | "FAILED" | "REFUNDED";
@@ -25,13 +29,8 @@ export interface Payment {
   reference: string | null;
   createdAt: string;
   updatedAt: string;
-  order?: {
-    orderNumber: string;
-  };
-  user?: {
-    name: string | null;
-    email: string;
-  };
+  order?: { orderNumber: string };
+  user?: { name: string | null; email: string };
 }
 
 interface PaymentContextType {
@@ -47,43 +46,56 @@ interface PaymentContextType {
 
 const PaymentContext = createContext<PaymentContextType | undefined>(undefined);
 
+const POLL_INTERVAL = 15_000;
+
 export const PaymentProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const previousPaymentsRef = useRef<Payment[]>([]);
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const { addNotification } = useNotifications();
 
+  const seenIdsRef = useRef<Set<string>>(new Set());
+  const initialLoadDoneRef = useRef(false);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
   const fetchAllPayments = useCallback(async () => {
-    setIsLoading(true);
+    if (!initialLoadDoneRef.current) setIsLoading(true);
+
     try {
       const data = await api<Payment[]>("/payments/admin/all");
 
-      // Check for new payments
-      const previousIds = new Set(previousPaymentsRef.current.map(p => p.id));
-      const newPayments = data.filter(p => !previousIds.has(p.id));
-
-      // Add notifications for new payments
-      newPayments.forEach(payment => {
-        addNotification({
-          type: "payment",
-          title: `Payment - ${payment.method}`,
-          message: `New payment received - ${payment.status} (₹${payment.amount})`,
-          relatedId: payment.id,
-          read: false,
+      if (initialLoadDoneRef.current) {
+        data.forEach((payment) => {
+          if (!seenIdsRef.current.has(payment.id)) {
+            addNotification({
+              type: "payment",
+              title: `Payment — ${payment.method}`,
+              message: `New ${payment.status} payment of Rs. ${payment.amount}`,
+              relatedId: payment.id,
+              read: false,
+            });
+          }
         });
-      });
+      }
 
+      data.forEach((p) => seenIdsRef.current.add(p.id));
       setPayments(data);
-      previousPaymentsRef.current = data;
+      initialLoadDoneRef.current = true;
     } catch (error: any) {
-      toast.error(error.message || "Failed to fetch admin payments");
+      toast.error(error.message || "Failed to fetch payments");
     } finally {
       setIsLoading(false);
     }
   }, [addNotification]);
+
+  useEffect(() => {
+    fetchAllPayments();
+    intervalRef.current = setInterval(fetchAllPayments, POLL_INTERVAL);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [fetchAllPayments]);
 
   const updatePaymentStatus = async (
     id: string,
@@ -91,36 +103,17 @@ export const PaymentProvider: React.FC<{ children: React.ReactNode }> = ({
     status: PaymentStatus,
   ) => {
     try {
-      const updatedPayment = await api<Payment>(`/payments/${id}/verify`, {
+      const updated = await api<Payment>(`/payments/${id}/verify`, {
         method: "PATCH",
         body: JSON.stringify({ reference, status }),
       });
-
-      setPayments((prev) =>
-        prev.map((p) => (p.id === id ? updatedPayment : p)),
-      );
-
+      setPayments((prev) => prev.map((p) => (p.id === id ? updated : p)));
       toast.success(`Payment status updated to ${status}`);
     } catch (error: any) {
       toast.error(error.message || "Failed to update payment status");
       throw error;
     }
   };
-
-  // Set up polling for new payments every 5 seconds
-  useEffect(() => {
-    fetchAllPayments();
-
-    pollingIntervalRef.current = setInterval(() => {
-      fetchAllPayments();
-    }, 5000); // Poll every 5 seconds
-
-    return () => {
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-      }
-    };
-  }, [fetchAllPayments]);
 
   return (
     <PaymentContext.Provider
@@ -132,8 +125,7 @@ export const PaymentProvider: React.FC<{ children: React.ReactNode }> = ({
 };
 
 export const usePayments = () => {
-  const context = useContext(PaymentContext);
-  if (!context)
-    throw new Error("usePayments must be used within PaymentProvider");
-  return context;
+  const ctx = useContext(PaymentContext);
+  if (!ctx) throw new Error("usePayments must be used within PaymentProvider");
+  return ctx;
 };

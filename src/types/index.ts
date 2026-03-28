@@ -25,6 +25,7 @@ export interface Order {
   notes?: string;
   subtotal: number;
   tax: number;
+  discount: number;
   shippingFee: number;
   total: number;
   createdAt: string;

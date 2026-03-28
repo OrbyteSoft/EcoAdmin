@@ -1,4 +1,18 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
+/**
+ * OrderContext
+ *
+ * Polls /orders/admin/all every 15 s.
+ * Fires addNotification only for brand-new order IDs (not seen in previous fetch).
+ * Uses a seenIdsRef that persists across re-renders so we never double-notify.
+ */
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+} from "react";
 import { api } from "@/lib/api";
 import { Order } from "@/types";
 import { toast } from "sonner";
@@ -13,74 +27,78 @@ interface OrderContextType {
 
 const OrderContext = createContext<OrderContextType | undefined>(undefined);
 
+// How often to poll (ms)
+const POLL_INTERVAL = 15_000;
+
 export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const previousOrdersRef = useRef<Order[]>([]);
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const { addNotification } = useNotifications();
 
+  // Track IDs we have already notified about — persists in memory across polls
+  const seenIdsRef = useRef<Set<string>>(new Set());
+  // True after the very first fetch completes — we don't notify on initial load
+  const initialLoadDoneRef = useRef(false);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
   const fetchAllOrders = useCallback(async () => {
-    setIsLoading(true);
+    // Only show the full-screen loader on first load
+    if (!initialLoadDoneRef.current) setIsLoading(true);
+
     try {
       const data = await api<Order[]>("/orders/admin/all");
 
-      // Check for new orders
-      const previousIds = new Set(previousOrdersRef.current.map(o => o.id));
-      const newOrders = data.filter(o => !previousIds.has(o.id));
-
-      // Add notifications for new orders
-      newOrders.forEach(order => {
-        addNotification({
-          type: "order",
-          title: `Order #${order.orderNumber || order.id.slice(0, 8)}`,
-          message: `New order received - ${order.status || "Pending"}`,
-          relatedId: order.id,
-          read: false,
+      if (initialLoadDoneRef.current) {
+        // Subsequent polls — notify for IDs we haven't seen before
+        data.forEach((order) => {
+          if (!seenIdsRef.current.has(order.id)) {
+            addNotification({
+              type: "order",
+              title: `Order #${order.orderNumber || order.id.slice(0, 8)}`,
+              message: `New order received — ${order.status ?? "PENDING"}`,
+              relatedId: order.id,
+              read: false,
+            });
+          }
         });
-      });
+      }
+
+      // Always mark all current IDs as seen
+      data.forEach((o) => seenIdsRef.current.add(o.id));
 
       setOrders(data);
-      previousOrdersRef.current = data;
+      initialLoadDoneRef.current = true;
     } catch (error: any) {
-      toast.error(error.message || "Failed to fetch admin orders");
+      toast.error(error.message || "Failed to fetch orders");
     } finally {
       setIsLoading(false);
     }
   }, [addNotification]);
 
+  // Start polling on mount, clear on unmount
+  useEffect(() => {
+    fetchAllOrders();
+    intervalRef.current = setInterval(fetchAllOrders, POLL_INTERVAL);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [fetchAllOrders]);
+
   const updateOrderStatus = async (id: string, status: string) => {
     try {
-      const updatedOrder = await api<Order>(`/orders/admin/${id}/status`, {
+      const updated = await api<Order>(`/orders/admin/${id}/status`, {
         method: "PATCH",
         body: JSON.stringify({ status }),
       });
-
-      setOrders((prev) => prev.map((o) => (o.id === id ? updatedOrder : o)));
-
+      setOrders((prev) => prev.map((o) => (o.id === id ? updated : o)));
       toast.success(`Order marked as ${status}`);
     } catch (error: any) {
-      toast.error(error.message || "Failed to update status");
+      toast.error(error.message || "Failed to update order status");
       throw error;
     }
   };
-
-  // Set up polling for new orders every 5 seconds
-  useEffect(() => {
-    fetchAllOrders();
-
-    pollingIntervalRef.current = setInterval(() => {
-      fetchAllOrders();
-    }, 5000); // Poll every 5 seconds
-
-    return () => {
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-      }
-    };
-  }, [fetchAllOrders]);
 
   return (
     <OrderContext.Provider
@@ -92,7 +110,7 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({
 };
 
 export const useOrders = () => {
-  const context = useContext(OrderContext);
-  if (!context) throw new Error("useOrders must be used within OrderProvider");
-  return context;
+  const ctx = useContext(OrderContext);
+  if (!ctx) throw new Error("useOrders must be used within OrderProvider");
+  return ctx;
 };

@@ -1,4 +1,13 @@
-import { Moon, Sun, LogOut, Bell, Package, CreditCard, ArrowRight } from "lucide-react";
+import {
+  Moon,
+  Sun,
+  LogOut,
+  Bell,
+  Package,
+  CreditCard,
+  ArrowRight,
+  AlertTriangle,
+} from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -26,15 +35,16 @@ export function AdminHeader() {
       navigate(`/orders?id=${notification.relatedId}`);
     } else if (notification.type === "payment") {
       navigate(`/payments?id=${notification.relatedId}`);
+    } else if (notification.type === "stock") {
+      navigate(`/products?id=${notification.relatedId}`);
     }
   };
 
-  const getNotificationIcon = (type: "order" | "payment") => {
-    return type === "order" ? (
-      <Package className="h-4 w-4 text-blue-500" />
-    ) : (
-      <CreditCard className="h-4 w-4 text-green-500" />
-    );
+  const getNotificationIcon = (type: "order" | "payment" | "stock") => {
+    if (type === "order") return <Package className="h-4 w-4 text-blue-500" />;
+    if (type === "payment")
+      return <CreditCard className="h-4 w-4 text-green-500" />;
+    return <AlertTriangle className="h-4 w-4 text-amber-500" />;
   };
 
   return (
@@ -121,13 +131,10 @@ export function AdminHeader() {
                         </p>
                         <div className="flex items-center justify-between mt-2">
                           <span className="text-xs text-muted-foreground/70">
-                            {new Date(notif.createdAt).toLocaleTimeString(
-                              [],
-                              {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              }
-                            )}
+                            {new Date(notif.createdAt).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
                           </span>
                           <ArrowRight className="h-3 w-3 text-muted-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity" />
                         </div>

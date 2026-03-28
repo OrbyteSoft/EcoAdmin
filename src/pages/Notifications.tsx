@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useNotifications } from "@/contexts/NotificationContext";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -37,267 +37,295 @@ import {
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
+  Bell,
+  CheckCheck,
 } from "lucide-react";
+
+const ITEMS_PER_PAGE = 10;
+
+type FilterType = "all" | "order" | "payment" | "stock";
+
+function formatTimeAgo(dateString: string): string {
+  const diff = Math.floor((Date.now() - new Date(dateString).getTime()) / 1000);
+  if (diff < 60) return "Just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
+  return new Date(dateString).toLocaleDateString();
+}
+
+function NotifIcon({ type }: { type: "order" | "payment" | "stock" }) {
+  if (type === "order") return <Package className="h-4 w-4 text-blue-500" />;
+  if (type === "payment")
+    return <CreditCard className="h-4 w-4 text-green-500" />;
+  return <AlertTriangle className="h-4 w-4 text-amber-500" />;
+}
 
 export default function Notifications() {
   const navigate = useNavigate();
-  const { notifications, markAsRead, deleteNotification, clearAll } =
-    useNotifications();
-  const [filterType, setFilterType] = useState<"all" | "order" | "payment">(
-    "all"
-  );
+  const {
+    notifications,
+    unreadCount,
+    markAsRead,
+    markAllAsRead,
+    deleteNotification,
+    clearAll,
+    isConnected,
+  } = useNotifications();
+
+  // ✅ Fixed: proper generic useState with correct default value
+  const [filterType, setFilterType] = useState<FilterType>("all");
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
 
-  const filteredNotifications =
+  const filtered =
     filterType === "all"
       ? notifications
       : notifications.filter((n) => n.type === filterType);
 
-  const totalPages = Math.ceil(filteredNotifications.length / itemsPerPage);
-  const startIdx = (currentPage - 1) * itemsPerPage;
-  const paginatedNotifications = filteredNotifications.slice(
-    startIdx,
-    startIdx + itemsPerPage
-  );
+  const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
+  const startIdx = (currentPage - 1) * ITEMS_PER_PAGE;
+  const paginated = filtered.slice(startIdx, startIdx + ITEMS_PER_PAGE);
 
-  const handleNotificationClick = (notification: any) => {
-    markAsRead(notification.id);
-    if (notification.type === "order") {
-      navigate(`/orders?id=${notification.relatedId}`);
-    } else if (notification.type === "payment") {
-      navigate(`/payments?id=${notification.relatedId}`);
-    }
+  const handleRowClick = (n: (typeof notifications)[0]) => {
+    markAsRead(n.id);
+    if (n.type === "order") navigate(`/orders?id=${n.relatedId}`);
+    else if (n.type === "payment") navigate(`/payments?id=${n.relatedId}`);
+    else navigate(`/products?id=${n.relatedId}`);
   };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInMinutes = Math.floor(
-      (now.getTime() - date.getTime()) / (1000 * 60)
-    );
-
-    if (diffInMinutes < 1) return "Just now";
-    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
-
-    const diffInHours = Math.floor(diffInMinutes / 60);
-    if (diffInHours < 24) return `${diffInHours}h ago`;
-
-    const diffInDays = Math.floor(diffInHours / 24);
-    if (diffInDays < 7) return `${diffInDays}d ago`;
-
-    return date.toLocaleDateString();
-  };
-
-  const getNotificationIcon = (type: "order" | "payment") => {
-    if (type === "order") {
-      return <Package className="h-4 w-4 text-blue-500" />;
-    } else {
-      return <CreditCard className="h-4 w-4 text-green-500" />;
-    }
-  };
-
-  if (notifications.length === 0) {
-    return (
-      <div className="space-y-4 animate-fade-in p-6">
-        <div className="flex items-center justify-between gap-4">
-          <h1 className="text-2xl font-bold">Notifications</h1>
-        </div>
-
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <AlertTriangle className="h-16 w-16 text-muted-foreground/30 mb-4" />
-            <p className="text-lg font-medium text-muted-foreground">
-              No notifications yet
-            </p>
-            <p className="text-sm text-muted-foreground">
-              You'll receive notifications when new orders or payments arrive
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   return (
-    <div className="space-y-4 animate-fade-in p-6">
+    <div className="p-6 space-y-6 animate-in fade-in duration-500">
+      {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Notifications</h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <h1 className="text-3xl font-bold tracking-tight">Notifications</h1>
+          <p className="text-muted-foreground text-sm mt-1">
             {notifications.length} total
-            {notifications.some((n) => !n.read) &&
-              ` • ${notifications.filter((n) => !n.read).length} unread`}
+            {unreadCount > 0 && (
+              <span className="ml-1 text-primary font-medium">
+                · {unreadCount} unread
+              </span>
+            )}
           </p>
         </div>
 
-        <div className="flex gap-2">
-          <Select
-            value={filterType}
-            onValueChange={(v: any) => {
-              setFilterType(v);
-              setCurrentPage(1);
-            }}
-          >
-            <SelectTrigger className="w-32">
-              <SelectValue placeholder="Filter..." />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="order">Orders</SelectItem>
-              <SelectItem value="payment">Payments</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {notifications.length > 0 && (
-            <Button
-              variant="outline"
-              onClick={() => clearAll()}
-              className="text-destructive hover:text-destructive"
-            >
-              Clear All
-            </Button>
-          )}
+        <div className="bg-muted/50 px-4 py-2 rounded-lg border flex items-center gap-2">
+          <Bell className="h-4 w-4 text-primary" />
+          <span className="text-sm font-medium">{unreadCount} Unread</span>
+          <span
+            className={`ml-1 h-2 w-2 rounded-full ${
+              isConnected ? "bg-green-500 animate-pulse" : "bg-red-500"
+            }`}
+          />
         </div>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-12">Type</TableHead>
-                <TableHead>Title</TableHead>
-                <TableHead>Message</TableHead>
-                <TableHead>Time</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paginatedNotifications.map((notification) => (
-                <TableRow
-                  key={notification.id}
-                  className={`cursor-pointer ${
-                    !notification.read ? "bg-muted/40" : ""
-                  } hover:bg-muted/50 transition-colors`}
-                >
-                  <TableCell>
-                    {getNotificationIcon(notification.type)}
-                  </TableCell>
-                  <TableCell
-                    className="font-medium"
-                    onClick={() => handleNotificationClick(notification)}
+      {/* Toolbar */}
+      <div className="flex flex-wrap gap-2">
+        <Select
+          value={filterType}
+          onValueChange={(v: FilterType) => {
+            setFilterType(v);
+            setCurrentPage(1);
+          }}
+        >
+          <SelectTrigger className="w-36">
+            <SelectValue placeholder="Filter…" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All</SelectItem>
+            <SelectItem value="order">Orders</SelectItem>
+            <SelectItem value="payment">Payments</SelectItem>
+            <SelectItem value="stock">Low Stock</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {unreadCount > 0 && (
+          <Button variant="outline" onClick={markAllAsRead} className="gap-2">
+            <CheckCheck className="h-4 w-4" />
+            Mark all read
+          </Button>
+        )}
+
+        {notifications.length > 0 && (
+          <Button
+            variant="outline"
+            onClick={clearAll}
+            className="text-destructive hover:text-destructive gap-2"
+          >
+            <Trash2 className="h-4 w-4" />
+            Clear all
+          </Button>
+        )}
+      </div>
+
+      {/* Table */}
+      {notifications.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-16">
+            <Bell className="h-12 w-12 text-muted-foreground/25 mb-4" />
+            <p className="font-medium text-muted-foreground">
+              No notifications yet
+            </p>
+            <p className="text-sm text-muted-foreground">
+              New orders, payments, and stock alerts will appear here
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="overflow-hidden">
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader className="bg-muted/30">
+                <TableRow>
+                  <TableHead className="w-10">Type</TableHead>
+                  <TableHead>Title</TableHead>
+                  <TableHead>Message</TableHead>
+                  <TableHead>Time</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {paginated.map((n) => (
+                  <TableRow
+                    key={n.id}
+                    className={`cursor-pointer transition-colors hover:bg-muted/50 ${
+                      !n.read ? "bg-muted/40" : ""
+                    }`}
                   >
-                    {notification.title}
-                  </TableCell>
-                  <TableCell
-                    className="text-muted-foreground text-sm max-w-xs truncate"
-                    onClick={() => handleNotificationClick(notification)}
-                  >
-                    {notification.message}
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {formatDate(notification.createdAt)}
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={notification.read ? "outline" : "default"}
-                      className="text-xs"
+                    <TableCell>
+                      <NotifIcon type={n.type} />
+                    </TableCell>
+                    <TableCell
+                      className="font-medium"
+                      onClick={() => handleRowClick(n)}
                     >
-                      {notification.read ? "Read" : "Unread"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right space-x-2">
-                    {!notification.read && (
+                      {n.title}
+                    </TableCell>
+                    <TableCell
+                      className="text-muted-foreground text-sm max-w-xs truncate"
+                      onClick={() => handleRowClick(n)}
+                    >
+                      {n.message}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                      {formatTimeAgo(n.createdAt)}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={n.read ? "outline" : "default"}
+                        className="text-xs"
+                      >
+                        {n.read ? "Read" : "Unread"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right space-x-1">
+                      {!n.read && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            markAsRead(n.id);
+                          }}
+                          title="Mark as read"
+                        >
+                          <CheckCircle2 className="h-4 w-4 text-green-600" />
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="icon"
                         className="h-7 w-7"
-                        onClick={() => markAsRead(notification.id)}
-                        title="Mark as read"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteId(n.id);
+                        }}
+                        title="Delete"
                       >
-                        <CheckCircle2 className="h-4 w-4 text-green-600" />
+                        <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
-                      onClick={() => setDeleteId(notification.id)}
-                      title="Delete notification"
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
-      {/* PAGINATION */}
-      {filteredNotifications.length > itemsPerPage && (
-        <div className="flex items-center justify-between mt-4 px-2">
-          <div className="text-sm text-muted-foreground">
-            Showing <span className="font-medium">{startIdx + 1}</span> to{" "}
-            <span className="font-medium">
-              {Math.min(startIdx + itemsPerPage, filteredNotifications.length)}
+      {/* Pagination */}
+      {filtered.length > ITEMS_PER_PAGE && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
+          <p className="text-sm text-muted-foreground">
+            Showing{" "}
+            <span className="font-semibold">
+              {startIdx + 1}–
+              {Math.min(startIdx + ITEMS_PER_PAGE, filtered.length)}
             </span>{" "}
-            of <span className="font-medium">{filteredNotifications.length}</span>{" "}
-            notifications
-          </div>
-
-          <div className="flex gap-2">
+            of <span className="font-semibold">{filtered.length}</span>
+          </p>
+          <div className="flex items-center gap-2">
             <Button
-              variant="outline"
               size="sm"
-              onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-              disabled={currentPage <= 1}
+              variant="outline"
+              className="h-8 w-8 p-0"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
             >
-              <ChevronLeft className="mr-2 h-4 w-4" /> Previous
+              <ChevronLeft className="h-4 w-4" />
             </Button>
-
-            <div className="flex items-center gap-1">
-              <span className="text-xs text-muted-foreground">
-                Page <span className="font-medium">{currentPage}</span> of{" "}
-                <span className="font-medium">{totalPages}</span>
-              </span>
-            </div>
-
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .slice(
+                Math.max(0, currentPage - 2),
+                Math.min(totalPages, currentPage + 1),
+              )
+              .map((p) => (
+                <Button
+                  key={p}
+                  size="sm"
+                  variant={currentPage === p ? "default" : "outline"}
+                  className="h-8 min-w-8"
+                  onClick={() => setCurrentPage(p)}
+                >
+                  {p}
+                </Button>
+              ))}
             <Button
-              variant="outline"
               size="sm"
-              onClick={() => setCurrentPage(currentPage + 1)}
+              variant="outline"
+              className="h-8 w-8 p-0"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={currentPage >= totalPages}
             >
-              Next <ChevronRight className="ml-2 h-4 w-4" />
+              <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
         </div>
       )}
 
-      {/* DELETE DIALOG */}
+      {/* Delete dialog */}
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Notification?</AlertDialogTitle>
+            <AlertDialogTitle>Delete notification?</AlertDialogTitle>
             <AlertDialogDescription>
-              This notification will be permanently removed from your list.
+              This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
               onClick={() => {
                 if (deleteId) {
                   deleteNotification(deleteId);
                   setDeleteId(null);
                 }
               }}
-              className="bg-destructive text-white hover:bg-destructive/90"
             >
               Delete
             </AlertDialogAction>

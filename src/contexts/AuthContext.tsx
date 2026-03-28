@@ -18,7 +18,7 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -31,25 +31,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const restoreSession = async () => {
       const token = getToken();
 
-      // If no token exists, immediately stop loading.
-      // Do not call api() as it might trigger redirect logic.
+      // No token → nothing to restore, show login immediately
       if (!token) {
         setIsLoading(false);
         return;
       }
 
       try {
+        // /auth/me is in SKIP_REFRESH_ENDPOINTS so a 401 here will NOT
+        // set isRedirecting or redirect — it just throws and we handle below
         const data = await api<User>("/auth/me");
 
         if (data.role !== "ADMIN") {
+          // Valid token but not an admin — clear and show login
           clearTokens();
           setUser(null);
         } else {
           setUser(data);
         }
-      } catch (err) {
-        console.error("Session restore failed:", err);
-        // api() utility already handles clearTokens and redirect for 401s
+      } catch {
+        // Token was invalid or expired — clear silently, let ProtectedRoute
+        // handle the redirect to /login. Do NOT navigate here so that
+        // isRedirecting stays false and the login form works immediately.
+        clearTokens();
         setUser(null);
       } finally {
         setIsLoading(false);
@@ -59,7 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     restoreSession();
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string): Promise<void> => {
     const data = await api<{
       accessToken: string;
       refreshToken: string;
@@ -77,10 +81,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(data.user);
   };
 
-  const logout = () => {
-    clearTokens();
-    setUser(null);
-    window.location.href = "/login";
+  const logout = async (): Promise<void> => {
+    try {
+      // Invalidate the refresh token server-side so it can't be reused
+      await api("/auth/logout", { method: "POST" });
+    } catch {
+      // Non-fatal — clear locally regardless
+    } finally {
+      clearTokens();
+      setUser(null);
+      window.location.href = "/login";
+    }
   };
 
   return (
@@ -92,8 +103,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used inside AuthProvider");
-  }
+  if (!context) throw new Error("useAuth must be used inside AuthProvider");
   return context;
 }

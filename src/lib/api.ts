@@ -1,30 +1,45 @@
 const BASE_URL = "http://localhost:3000/api/v1";
 
-// Prevents the app from trying to redirect to login multiple times simultaneously
 let isRedirecting = false;
 
-export function getToken() {
+/**
+ * Endpoints that must NEVER trigger the refresh/redirect flow.
+ * - Auth endpoints: obvious reasons
+ * - /auth/me: used on page load to restore session — if the token is
+ *   expired here, we want to silently clear and show login, NOT redirect
+ *   with isRedirecting=true which would block the next real login attempt.
+ */
+const SKIP_REFRESH_ENDPOINTS = [
+  "/auth/login",
+  "/auth/register",
+  "/auth/refresh",
+  "/auth/me",
+];
+
+export function getToken(): string | null {
   return localStorage.getItem("access_token");
 }
 
-export function getRefreshToken() {
+export function getRefreshToken(): string | null {
   return localStorage.getItem("refresh_token");
 }
 
-export function getUserRole() {
+export function getUserRole(): string | null {
   return localStorage.getItem("user_role");
 }
 
-export function setTokens(access: string, refresh: string, role: string) {
+export function setTokens(access: string, refresh: string, role: string): void {
   localStorage.setItem("access_token", access);
   localStorage.setItem("refresh_token", refresh);
   localStorage.setItem("user_role", role);
 }
 
-export function clearTokens() {
+export function clearTokens(): void {
   localStorage.removeItem("access_token");
   localStorage.removeItem("refresh_token");
   localStorage.removeItem("user_role");
+  // Always reset so the next login attempt is never blocked
+  isRedirecting = false;
 }
 
 async function attemptRefresh(): Promise<boolean> {
@@ -50,6 +65,12 @@ async function attemptRefresh(): Promise<boolean> {
   }
 }
 
+function parseErrorMessage(data: any): string {
+  if (!data?.message) return "Something went wrong";
+  if (Array.isArray(data.message)) return data.message.join(", ");
+  return data.message;
+}
+
 export async function api<T = any>(
   endpoint: string,
   options: RequestInit = {},
@@ -62,29 +83,20 @@ export async function api<T = any>(
   const token = getToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  let res = await fetch(`${BASE_URL}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  let res = await fetch(`${BASE_URL}${endpoint}`, { ...options, headers });
 
-  // Handle Token Expiration
-  if (res.status === 401 && !endpoint.includes("/auth/refresh")) {
+  const isSkipped = SKIP_REFRESH_ENDPOINTS.some((e) => endpoint.includes(e));
+
+  if (res.status === 401 && !isSkipped) {
     const refreshed = await attemptRefresh();
 
     if (refreshed) {
-      // Retry the original request with new token
       headers["Authorization"] = `Bearer ${getToken()}`;
-      res = await fetch(`${BASE_URL}${endpoint}`, {
-        ...options,
-        headers,
-      });
+      res = await fetch(`${BASE_URL}${endpoint}`, { ...options, headers });
     } else {
-      // REFRESH FAILED: Clean up and redirect
       clearTokens();
 
-      const isLoginPage = window.location.pathname.includes("/login");
-
-      if (!isLoginPage && !isRedirecting) {
+      if (!window.location.pathname.includes("/login") && !isRedirecting) {
         isRedirecting = true;
         window.location.href = "/login?error=expired";
       }
@@ -96,10 +108,8 @@ export async function api<T = any>(
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    if (res.status === 403) {
-      throw new Error("Access Denied: Admins Only");
-    }
-    throw new Error(data.message || "Something went wrong");
+    if (res.status === 403) throw new Error("Access Denied: Admins Only");
+    throw new Error(parseErrorMessage(data));
   }
 
   return data;

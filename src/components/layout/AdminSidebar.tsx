@@ -77,7 +77,7 @@ export function AdminSidebar() {
     <Sidebar className="border-r border-sidebar-border">
       <div className="flex h-14 items-center gap-2 border-b border-sidebar-border px-4">
         <Package className="h-6 w-6 text-primary" />
-        <span className="text-lg font-bold tracking-tight">ShopAdmin</span>
+        <span className="text-lg font-bold tracking-tight">EcoAdmin</span>
       </div>
       <SidebarContent>
         <NavGroup label="Main" items={mainItems} />

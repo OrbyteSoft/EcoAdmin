@@ -60,18 +60,61 @@ const PageLoader = () => (
   </div>
 );
 
+// Redirects authenticated admins away from the login page
+const PublicRoute = () => {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) return <PageLoader />;
+
+  // Already logged in as admin → go straight to dashboard
+  if (user && user.role === "ADMIN") {
+    return <Navigate to="/" replace />;
+  }
+
+  return <Outlet />;
+};
+
+// Blocks unauthenticated or non-admin users from protected pages
 const ProtectedRoute = () => {
   const { user, isLoading } = useAuth();
 
-  if (isLoading) {
-    return <PageLoader />;
-  }
+  if (isLoading) return <PageLoader />;
 
   if (!user || user.role !== "ADMIN") {
     return <Navigate to="/login" replace />;
   }
 
   return <Outlet />;
+};
+
+const AppRoutes = () => {
+  return (
+    <Routes>
+      {/* Public: redirect to dashboard if already authenticated */}
+      <Route element={<PublicRoute />}>
+        <Route path="/login" element={<Login />} />
+      </Route>
+
+      {/* Protected: require ADMIN role */}
+      <Route element={<ProtectedRoute />}>
+        <Route element={<AdminLayout />}>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/products" element={<Products />} />
+          <Route path="/categories" element={<Categories />} />
+          <Route path="/brands" element={<Brands />} />
+          <Route path="/orders" element={<Orders />} />
+          <Route path="/users" element={<UsersPage />} />
+          <Route path="/payments" element={<Payments />} />
+          <Route path="/coupons" element={<Coupons />} />
+          <Route path="/reviews" element={<Reviews />} />
+          <Route path="/notifications" element={<Notifications />} />
+          <Route path="/settings" element={<Settings />} />
+        </Route>
+      </Route>
+
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+  );
 };
 
 const App = () => {
@@ -81,70 +124,26 @@ const App = () => {
         <TooltipProvider>
           <Toaster />
           <Sonner />
-
-          <AuthProvider>
-            <NotificationProvider>
-              <UserProvider>
-                <CategoryProvider>
-                  <ProductProvider>
-                    <BrandProvider>
-                      <OrderProvider>
-                        <PaymentProvider>
-                          <BrowserRouter>
-                            <Routes>
-                              <Route path="/login" element={<Login />} />
-
-                              <Route element={<ProtectedRoute />}>
-                                <Route element={<AdminLayout />}>
-                                  <Route path="/" element={<Dashboard />} />
-                                  <Route
-                                    path="/products"
-                                    element={<Products />}
-                                  />
-                                  <Route
-                                    path="/categories"
-                                    element={<Categories />}
-                                  />
-                                  <Route path="/brands" element={<Brands />} />
-                                  <Route path="/orders" element={<Orders />} />
-                                  <Route
-                                    path="/users"
-                                    element={<UsersPage />}
-                                  />
-                                  <Route
-                                    path="/payments"
-                                    element={<Payments />}
-                                  />
-                                  <Route
-                                    path="/coupons"
-                                    element={<Coupons />}
-                                  />
-                                  <Route
-                                    path="/reviews"
-                                    element={<Reviews />}
-                                  />
-                                  <Route
-                                    path="/notifications"
-                                    element={<Notifications />}
-                                  />
-                                  <Route
-                                    path="/settings"
-                                    element={<Settings />}
-                                  />
-                                </Route>
-                              </Route>
-
-                              <Route path="*" element={<NotFound />} />
-                            </Routes>
-                          </BrowserRouter>
-                        </PaymentProvider>
-                      </OrderProvider>
-                    </BrandProvider>
-                  </ProductProvider>
-                </CategoryProvider>
-              </UserProvider>
-            </NotificationProvider>
-          </AuthProvider>
+          {/* BrowserRouter wraps everything so useNavigate works anywhere */}
+          <BrowserRouter>
+            <AuthProvider>
+              <NotificationProvider>
+                <UserProvider>
+                  <CategoryProvider>
+                    <ProductProvider>
+                      <BrandProvider>
+                        <OrderProvider>
+                          <PaymentProvider>
+                            <AppRoutes />
+                          </PaymentProvider>
+                        </OrderProvider>
+                      </BrandProvider>
+                    </ProductProvider>
+                  </CategoryProvider>
+                </UserProvider>
+              </NotificationProvider>
+            </AuthProvider>
+          </BrowserRouter>
         </TooltipProvider>
       </QueryClientProvider>
     </ThemeProvider>
